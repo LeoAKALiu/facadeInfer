@@ -1,4 +1,5 @@
-data/
+# Keep data/demo for the live demo
+!data/demo/
 outputs/
 backend/uploads/
 *.jpg

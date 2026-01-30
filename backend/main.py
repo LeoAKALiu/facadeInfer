@@ -30,6 +30,13 @@ app.add_middleware(
 static_abs_path = os.path.join(os.path.dirname(__file__), "static")
 app.mount("/static", StaticFiles(directory=static_abs_path), name="static")
 
+# Mount Demo Data
+demo_data_path = os.path.abspath(
+    os.path.join(os.path.dirname(__file__), "..", "data", "demo")
+)
+if os.path.exists(demo_data_path):
+    app.mount("/demo_data", StaticFiles(directory=demo_data_path), name="demo_data")
+
 # Initialize Processors
 # Use /tmp for uploads on Vercel
 UPLOAD_DIR = "/tmp" if os.environ.get("VERCEL") else "uploads"
@@ -49,6 +56,92 @@ layout_generator = LayoutGenerator()
 async def root():
     index_path = os.path.join(os.path.dirname(__file__), "static", "index.html")
     return FileResponse(index_path)
+
+
+@app.get("/cases")
+async def get_cases():
+    # Hardcoded cases for the demo
+    return [
+        {
+            "id": "IMG_1397",
+            "name": "Facade Case A",
+            "thumbnail": "/demo_data/IMG_1397.JPG",
+        },
+        {
+            "id": "IMG_1398",
+            "name": "Facade Case B",
+            "thumbnail": "/demo_data/IMG_1398.JPG",
+        },
+        {
+            "id": "IMG_1399",
+            "name": "Facade Case C",
+            "thumbnail": "/demo_data/IMG_1399.JPG",
+        },
+    ]
+
+
+@app.post("/analyze_demo")
+async def analyze_demo(case_id: str = Form(...)):
+    try:
+        # 1. Load pre-annotated data
+        json_path = os.path.join(demo_data_path, f"{case_id}_ortho.json")
+        img_path = os.path.join(demo_data_path, f"{case_id}_ortho.jpg")
+
+        if not os.path.exists(json_path):
+            raise HTTPException(status_code=404, detail="Demo data not found")
+
+        with open(json_path, "r") as f:
+            data = json.load(f)
+
+        # 2. Convert LabelMe shapes to bounding boxes
+        bounding_boxes = []
+        for shape in data["shapes"]:
+            pts = np.array(shape["points"])
+            x_min, y_min = pts.min(axis=0)
+            x_max, y_max = pts.max(axis=0)
+            w = x_max - x_min
+            h = y_max - y_min
+            bounding_boxes.append(
+                [shape["label"], int(x_min), int(y_min), int(w), int(h)]
+            )
+
+        # Get image dimensions from the file
+        from PIL import Image
+
+        with Image.open(img_path) as img:
+            image_dims = img.size  # (W, H)
+
+        # 3. Analyze
+        risk_report = semantic_analyzer.analyze(bounding_boxes, image_dims)
+
+        # 4. Generate DXF
+        dxf_filename = f"demo_{case_id}.dxf"
+        dxf_path = os.path.join(static_abs_path, dxf_filename)
+        if not os.environ.get("VERCEL"):
+            layout_generator.generate_dxf(bounding_boxes, image_dims, dxf_path)
+        else:
+            # On Vercel, just use a placeholder or reuse if exists
+            dxf_filename = "demo_layout.dxf"
+
+        return {
+            "status": "success",
+            "risk_report": risk_report,
+            "images": {
+                "original": f"/demo_data/{case_id}.JPG",
+                "processed": f"/demo_data/{case_id}_ortho.jpg",
+            },
+            "cad": {"dxf_url": f"/static/{dxf_filename}"},
+            "debug": {
+                "boxes_count": len(bounding_boxes),
+                "image_dims": image_dims,
+                "raw_boxes": bounding_boxes,
+            },
+        }
+    except Exception as e:
+        import traceback
+
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.post("/analyze")

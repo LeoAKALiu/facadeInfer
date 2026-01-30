@@ -617,20 +617,16 @@
         <div class="header-right">
             <div id="aiStatus" style="display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--accent-success); margin-right: 12px;">
                 <span class="status-dot" style="box-shadow: 0 0 8px var(--accent-success);"></span>
-                AI Engine: Online
+                System Ready: Demo Mode
             </div>
-            <div class="btn btn-outline" onclick="document.getElementById('fileInput').click()">
-                <i class="ri-file-upload-line"></i>
-                Upload Image
+            <div class="btn btn-primary" onclick="showCaseSelector()">
+                <i class="ri-folder-open-line"></i>
+                Select Demo Case
             </div>
             <input type="file" id="fileInput" hidden accept="image/*">
-            <div class="btn btn-outline">
-                <i class="ri-settings-4-line"></i>
-                Settings
-            </div>
-            <div class="btn btn-primary" id="runBtn">
-                <i class="ri-play-fill"></i>
-                Run Analysis
+            <div class="btn btn-outline" onclick="location.reload()">
+                <i class="ri-refresh-line"></i>
+                Reset
             </div>
         </div>
     </header>
@@ -707,6 +703,19 @@
                             <button class="btn btn-primary" id="confirmRectBtn" style="height: 24px; padding: 0 8px; font-size: 10px; display: none;" onclick="confirmRectification()">Confirm</button>
                             <button class="btn btn-outline" style="height: 24px; padding: 0 8px; font-size: 10px;" onclick="resetRectification()">Reset</button>
                         </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Case Selector Modal -->
+            <div id="caseSelectorModal" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.8); z-index: 1000; align-items: center; justify-content: center;">
+                <div style="background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 12px; padding: 32px; width: 600px; max-width: 90%;">
+                    <h2 style="margin-bottom: 24px; font-family: 'Inter-Bold';">Select Architectural Case</h2>
+                    <div id="caseList" style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 24px;">
+                        <!-- Case items will be injected here -->
+                    </div>
+                    <div style="display: flex; justify-content: flex-end;">
+                        <button class="btn btn-outline" onclick="document.getElementById('caseSelectorModal').style.display='none'">Cancel</button>
                     </div>
                 </div>
             </div>
@@ -858,213 +867,115 @@
     </div>
 
     <script>
-        const fileInput = document.getElementById('fileInput');
-        const runBtn = document.getElementById('runBtn');
         const mainImage = document.getElementById('mainImage');
-        const rectificationLayer = document.getElementById('rectificationLayer');
-        const selectionCanvas = document.getElementById('selectionCanvas');
-        const ctx = selectionCanvas.getContext('2d');
         const rectificationHint = document.getElementById('rectificationHint');
         const confirmRectBtn = document.getElementById('confirmRectBtn');
         
-        let selectedFile = null;
-        let points = [];
+        let selectedCase = null;
         let originalImageDims = [0, 0];
 
-        const API_URL = "http://localhost:8000";
+        const API_URL = location.origin;
 
-        // Settings Button
-        document.querySelectorAll('.btn-outline').forEach(btn => {
-            if (btn.innerText.includes('Settings')) {
-                btn.onclick = () => {
-                    alert("Settings placeholder.");
-                };
-            }
-        });
-
-        function startRectification() {
-            if (!selectedFile) {
-                alert("Please upload an image first!");
-                return;
-            }
-            const rect = mainImage.parentElement.getBoundingClientRect();
-            selectionCanvas.width = rect.width;
-            selectionCanvas.height = rect.height;
+        async function showCaseSelector() {
+            const modal = document.getElementById('caseSelectorModal');
+            const list = document.getElementById('caseList');
+            modal.style.display = 'flex';
             
-            points = [];
-            rectificationLayer.style.display = 'block';
-            confirmRectBtn.style.display = 'none';
-            rectificationHint.innerText = "Click to define facade boundary. Click start point to close.";
-            log("Polyline mode active. Trace the facade outline.", 'info');
-            drawPoints();
-        }
-
-        rectificationLayer.addEventListener('click', e => {
-            const rect = rectificationLayer.getBoundingClientRect();
-            const x = e.clientX - rect.left;
-            const y = e.clientY - rect.top;
-            
-            if (x < 0 || x > rect.width || y < 0 || y > rect.height) return;
-
-            // Check for closure
-            if (points.length >= 3) {
-                const startP = points[0];
-                const dist = Math.sqrt((x - startP.x)**2 + (y - startP.y)**2);
-                if (dist < 20) {
-                    closePolygon();
-                    return;
-                }
-            }
-
-            points.push({x, y});
-            drawPoints();
-            rectificationHint.innerText = `Points: ${points.length}. Click near start to close.`;
-        });
-
-        function closePolygon() {
-            if (points.length < 3) return;
-            rectificationHint.innerText = "Polygon closed. Confirm to rectify facade.";
-            confirmRectBtn.style.display = 'block';
-            drawPoints(true);
-        }
-
-        function drawPoints(isClosed = false) {
-            ctx.clearRect(0, 0, selectionCanvas.width, selectionCanvas.height);
-            
-            ctx.strokeStyle = '#3b82f6';
-            ctx.lineWidth = 2;
-            ctx.setLineDash([5, 5]);
-
-            if (points.length > 0) {
-                ctx.beginPath();
-                ctx.moveTo(points[0].x, points[0].y);
-                for (let i = 1; i < points.length; i++) {
-                    ctx.lineTo(points[i].x, points[i].y);
-                }
-                
-                if (isClosed) {
-                    ctx.closePath();
-                    ctx.setLineDash([]);
-                    ctx.fillStyle = 'rgba(59, 130, 246, 0.3)';
-                    ctx.fill();
-                }
-                ctx.stroke();
-
-                // Draw handles
-                ctx.setLineDash([]);
-                points.forEach((p, i) => {
-                    ctx.fillStyle = i === 0 ? '#10b981' : '#3b82f6'; // Green for start
-                    ctx.beginPath();
-                    ctx.arc(p.x, p.y, 6, 0, Math.PI * 2);
-                    ctx.fill();
+            try {
+                const res = await fetch(`${API_URL}/cases`);
+                const cases = await res.json();
+                list.innerHTML = '';
+                cases.forEach(c => {
+                    const div = document.createElement('div');
+                    div.style.cssText = 'background: var(--bg-muted); border: 1px solid var(--border-color); border-radius: 8px; overflow: hidden; cursor: pointer; transition: transform 0.2s;';
+                    div.innerHTML = `
+                        <img src="${API_URL}${c.thumbnail}" style="width: 100%; height: 120px; object-fit: cover;">
+                        <div style="padding: 12px; font-size: 13px; text-align: center;">${c.name}</div>
+                    `;
+                    div.onclick = () => selectCase(c);
+                    div.onmouseenter = () => div.style.transform = 'scale(1.05)';
+                    div.onmouseleave = () => div.style.transform = 'scale(1)';
+                    list.appendChild(div);
                 });
+            } catch (e) {
+                console.error("Failed to load cases", e);
             }
         }
 
-        function resetRectification() {
-            points = [];
-            drawPoints();
-            rectificationHint.innerText = "Click to define facade boundary. Click start point to close.";
-            confirmRectBtn.style.display = 'none';
+        function selectCase(c) {
+            selectedCase = c;
+            document.getElementById('caseSelectorModal').style.display = 'none';
+            mainImage.src = `${API_URL}${c.thumbnail}`;
+            mainImage.style.display = 'block';
+            mainImage.style.objectFit = 'fill'; // Fill area as requested
+            log(`Selected case: ${c.name}`, 'info');
+            
+            // Enable Step 1
+            const step1 = document.querySelectorAll('.step-item')[0];
+            step1.classList.add('active');
+            step1.disabled = false;
         }
 
-        function confirmRectification() {
-            log("Rectification confirmed. Points stored.", 'success');
-            rectificationLayer.style.display = 'none';
-            document.getElementById('aiStep').classList.add('active');
-            document.getElementById('aiStep').disabled = false;
-        }
-
-        // Logger function
-        function log(msg, type='info') {
-            const container = document.querySelector('.log-container');
-            const entry = document.createElement('div');
-            entry.className = 'log-entry';
-            const time = new Date().toLocaleTimeString('en-US', {hour12: false});
-            entry.innerHTML = `<span class="log-time">[${time}]</span> <span class="log-msg ${type}">${msg}</span>`;
-            container.appendChild(entry);
-            container.scrollTop = container.scrollHeight;
-        }
-
-        // File Selection
-        fileInput.addEventListener('change', (e) => {
-            if (e.target.files.length > 0) {
-                selectedFile = e.target.files[0];
-                log(`File selected: ${selectedFile.name}`, 'info');
-                
-                // Preview
-                const reader = new FileReader();
-                reader.onload = (e) => {
-                    mainImage.src = e.target.result;
-                    mainImage.style.display = 'block';
-                    
-                    // Reset rectification points on new upload
-                    points = [];
-                    
-                    const tempImg = new Image();
-                    tempImg.onload = () => {
-                        originalImageDims = [tempImg.width, tempImg.height];
-                    };
-                    tempImg.src = e.target.result;
-                }
-                reader.readAsDataURL(selectedFile);
-            }
-        });
-
-        // Run Analysis
-        async function runAnalysis() {
-            if (!selectedFile) {
-                alert("Please select an image first!");
+        async function startRectification() {
+            if (!selectedCase) {
+                alert("Please select a case first!");
                 return;
             }
-
-            log("Starting AI analysis...", 'info');
-            const formData = new FormData();
-            formData.append('file', selectedFile);
+            log("Applying perspective rectification matrix...", 'info');
             
-            // Map selected points to original image dimensions
-            if (points.length === 4) {
-                const imgRect = mainImage.getBoundingClientRect();
-                const scaleX = originalImageDims[0] / imgRect.width;
-                const scaleY = originalImageDims[1] / imgRect.height;
+            // Simulation of transition
+            mainImage.style.opacity = '0';
+            setTimeout(() => {
+                mainImage.src = `${API_URL}/demo_data/${selectedCase.id}_ortho.jpg`;
+                mainImage.style.objectFit = 'fill'; // Rectified fills area
+                mainImage.style.opacity = '1';
+                log("Rectification complete. View normalized.", 'success');
                 
-                const corners = points.map(p => [p.x * scaleX, p.y * scaleY]);
-                formData.append('corners', JSON.stringify(corners));
-                log("Applying perspective rectification...", 'info');
-            }
+                // Enable AI Step
+                const aiStep = document.getElementById('aiStep');
+                aiStep.classList.add('active');
+                aiStep.disabled = false;
+            }, 800);
+        }
+
+        async function runAnalysis() {
+            if (!selectedCase) return;
+
+            log("Executing AI Semantic Parsing (Fixed Reference)...", 'info');
+            const formData = new FormData();
+            formData.append('case_id', selectedCase.id);
 
             try {
-                log("Uploading and processing with SegFormer AI...", 'info');
-                const response = await fetch(`${API_URL}/analyze`, {
+                const response = await fetch(`${API_URL}/analyze_demo`, {
                     method: 'POST',
                     body: formData
                 });
 
-                if (!response.ok) throw new Error("Analysis failed");
+                if (!response.ok) throw new Error("Demo analysis failed");
 
                 const data = await response.json();
-                log(`Analysis complete! Detected ${data.debug.boxes_count} elements.`, 'success');
-                console.log(data);
+                log(`Parsing successful! Found ${data.debug.boxes_count} structural components.`, 'success');
 
-                // Update UI with results
+                // Update UI
                 updateMetrics(data.risk_report);
                 updateElementsTable(data.debug.raw_boxes || []);
                 renderDetections(data.debug.raw_boxes || [], data.debug.image_dims);
                 
-                if (data.images.processed) {
-                    mainImage.src = `${API_URL}${data.images.processed}`;
-                    log("Loaded processed visualization.", 'success');
-                }
-                
                 if (data.cad.dxf_url) {
-                    const downloadBtn = document.createElement('a');
+                    // Find or create download button
+                    let downloadBtn = document.getElementById('fixedDownloadBtn');
+                    if (!downloadBtn) {
+                        downloadBtn = document.createElement('a');
+                        downloadBtn.id = 'fixedDownloadBtn';
+                        downloadBtn.className = "btn btn-outline";
+                        downloadBtn.style.marginTop = "10px";
+                        document.querySelector('.data-panel').prepend(downloadBtn);
+                    }
                     downloadBtn.href = `${API_URL}${data.cad.dxf_url}`;
-                    downloadBtn.download = "layout.dxf";
-                    downloadBtn.className = "btn btn-outline";
-                    downloadBtn.style.marginTop = "10px";
-                    downloadBtn.innerHTML = '<i class="ri-download-line"></i> Download DXF';
-                    document.querySelector('.data-panel').prepend(downloadBtn);
-                    log("CAD file generated.", 'success');
+                    downloadBtn.download = `facade_${selectedCase.id}.dxf`;
+                    downloadBtn.innerHTML = '<i class="ri-download-line"></i> Download CAD (.DXF)';
+                    
+                    log("CAD vector generation complete.", 'success');
                     
                     document.getElementById('downloadStep').classList.add('completed');
                     document.getElementById('downloadStep').disabled = false;
@@ -1072,11 +983,8 @@
 
             } catch (error) {
                 log(`Error: ${error.message}`, 'warn');
-                console.error(error);
             }
         }
-
-        runBtn.addEventListener('click', runAnalysis);
 
         function updateMetrics(report) {
             // Helper to find metric elements by text content (fragile but quick for demo)
