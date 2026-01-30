@@ -80,9 +80,11 @@ async def analyze_facade(file: UploadFile = File(...), corners: str = Form(None)
                 "estimated_structure": "RC Frame (Reinforced)",
             }
 
-            dxf_filename = f"demo_layout_{os.path.splitext(filename)[0]}.dxf"
-            dxf_path = os.path.join(image_processor.static_dir, dxf_filename)
-            layout_generator.generate_dxf(bounding_boxes, image_dims, dxf_path)
+            # Skip generating DXF on Vercel to avoid read-only filesystem crash
+            dxf_filename = "demo_layout.dxf"
+            if not os.environ.get("VERCEL"):
+                dxf_path = os.path.join(image_processor.static_dir, dxf_filename)
+                layout_generator.generate_dxf(bounding_boxes, image_dims, dxf_path)
 
             return {
                 "status": "success",

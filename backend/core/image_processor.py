@@ -12,8 +12,12 @@ class ImageProcessor:
     def __init__(self, upload_dir="backend/uploads", static_dir="backend/static"):
         self.upload_dir = upload_dir
         self.static_dir = static_dir
-        os.makedirs(self.upload_dir, exist_ok=True)
-        os.makedirs(self.static_dir, exist_ok=True)
+
+        # Only create directories if not on Vercel
+        if not os.environ.get("VERCEL"):
+            os.makedirs(self.upload_dir, exist_ok=True)
+            os.makedirs(self.static_dir, exist_ok=True)
+
         self.logger = logging.getLogger(__name__)
 
         self.feature_extractor = None
