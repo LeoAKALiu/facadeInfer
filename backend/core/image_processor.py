@@ -38,6 +38,8 @@ class ImageProcessor:
             self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
             self.model_name = "Xpitfire/segformer-finetuned-segments-cmp-facade"
             self.token = os.getenv("HF_TOKEN")
+
+            self.logger.info(f"Loading model {self.model_name} on {self.device}...")
             self.feature_extractor = SegformerImageProcessor.from_pretrained(
                 self.model_name, token=self.token
             )
@@ -47,20 +49,23 @@ class ImageProcessor:
             self.model.to(self.device)
             self.model.eval()
         except ImportError:
-            self.logger.warning("Heavy AI dependencies not found.")
+            self.logger.warning(
+                "Heavy AI dependencies not found. AI processing will be disabled."
+            )
 
     def process(self, image_path: str, corners: list = None):
+        if not os.path.exists(image_path):
+            raise FileNotFoundError(f"Image not found: {image_path}")
+
         if cv2 is None or os.environ.get("VERCEL"):
             # Return demo data if on Vercel or no OpenCV
             return "static/demo_rectified.jpg", [], (1024, 800)
-
-        if not os.path.exists(image_path):
-            raise FileNotFoundError(f"Image not found: {image_path}")
 
         pil_img = Image.open(image_path).convert("RGB")
         pil_img = ImageOps.exif_transpose(pil_img)
         img_np = np.array(pil_img)
 
+        # 1. Perspective Rectification if corners provided
         if corners and len(corners) >= 3:
             src_pts = np.array(corners, dtype="float32")
             s = src_pts.sum(axis=1)
@@ -119,10 +124,10 @@ class ImageProcessor:
         boxes = []
         return processed_path, boxes, (target_width, target_height)
 
-    def _split_vertically(self, mask, x, y, w, h):
-        if h < 50:
-            return [(x, y, w, h)]
-        sub_mask = mask[y : y + h, x : x + w]
+    def _split_vertically(self, mask, x, y, m_w, m_h):
+        if m_h < 50:
+            return [(x, y, m_w, m_h)]
+        sub_mask = mask[y : y + m_h, x : x + m_w]
         proj = np.sum(sub_mask, axis=1)
         threshold = np.max(proj) * 0.4
         is_object = proj > threshold
@@ -135,19 +140,19 @@ class ImageProcessor:
                 if (i - start) > 10:
                     segments.append((start, i - start))
                 start = None
-        if start is not None and (h - start) > 10:
-            segments.append((start, h - start))
+        if start is not None and (m_h - start) > 10:
+            segments.append((start, m_h - start))
         if len(segments) > 1:
             results = []
             for s_y, s_h in segments:
-                results.extend(self._split_horizontally(mask, x, y + s_y, w, s_h))
+                results.extend(self._split_horizontally(mask, x, y + s_y, m_w, s_h))
             return results
-        return self._split_horizontally(mask, x, y, w, h)
+        return self._split_horizontally(mask, x, y, m_w, m_h)
 
-    def _split_horizontally(self, mask, x, y, w, h):
-        if w < 50:
-            return [(x, y, w, h)]
-        sub_mask = mask[y : y + h, x : x + w]
+    def _split_horizontally(self, mask, x, y, m_w, m_h):
+        if m_w < 50:
+            return [(x, y, m_w, m_h)]
+        sub_mask = mask[y : y + m_h, x : x + m_w]
         proj = np.sum(sub_mask, axis=0)
         threshold = np.max(proj) * 0.4
         is_object = proj > threshold
@@ -160,8 +165,8 @@ class ImageProcessor:
                 if (i - start) > 10:
                     segments.append((start, i - start))
                 start = None
-        if start is not None and (w - start) > 10:
-            segments.append((start, w - start))
+        if start is not None and (m_w - start) > 10:
+            segments.append((start, m_w - start))
         if len(segments) > 1:
-            return [(x + s_x, y, s_w, h) for s_x, s_w in segments]
-        return [(x, y, w, h)]
+            return [(x + s_x, y, s_w, m_h) for s_x, s_w in segments]
+        return [(x, y, m_w, m_h)]

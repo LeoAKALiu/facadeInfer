@@ -1,6 +1,7 @@
 import os
 import sys
 import json
+import shutil
 import numpy as np
 from fastapi import FastAPI, UploadFile, File, HTTPException, Form
 from fastapi.staticfiles import StaticFiles
@@ -8,7 +9,7 @@ from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from PIL import Image
 
-# Add current dir to path
+# Add the current directory to sys.path to support both local run and Vercel deployment
 sys.path.append(os.path.dirname(__file__))
 
 from core.image_processor import ImageProcessor
@@ -31,7 +32,11 @@ static_abs_path = os.path.join(os.path.dirname(__file__), "static")
 app.mount("/static", StaticFiles(directory=static_abs_path), name="static")
 
 # Initialize Processors
-UPLOAD_DIR = "/tmp" if os.environ.get("VERCEL") else "uploads"
+UPLOAD_DIR = (
+    "/tmp"
+    if os.environ.get("VERCEL")
+    else os.path.join(os.path.dirname(__file__), "uploads")
+)
 STATIC_DIR = static_abs_path
 
 if not os.environ.get("VERCEL") and not os.path.exists(UPLOAD_DIR):
@@ -152,6 +157,52 @@ async def analyze_demo(case_id: str = Form(...)):
                 "original": f"/static/demo_data/{case_id}.JPG",
                 "processed": f"/static/demo_data/{case_id}_ortho.jpg",
             },
+            "debug": {
+                "boxes_count": len(bounding_boxes),
+                "image_dims": image_dims,
+                "raw_boxes": bounding_boxes,
+            },
+        }
+    except Exception as e:
+        import traceback
+
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/analyze")
+async def analyze_facade(file: UploadFile = File(...), corners: str = Form(None)):
+    try:
+        parsed_corners = None
+        if corners:
+            parsed_corners = json.loads(corners)
+
+        filename = file.filename
+        upload_path = os.path.join(image_processor.upload_dir, filename)
+        with open(upload_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+
+        processed_path, bounding_boxes, image_dims = image_processor.process(
+            upload_path, corners=parsed_corners
+        )
+
+        # 3. Analyze Semantics (Risk Assessment)
+        risk_report = semantic_analyzer.analyze(bounding_boxes, image_dims)
+
+        # 4. Generate CAD Layout
+        dxf_filename = f"layout_{os.path.splitext(filename)[0]}.dxf"
+        dxf_path = os.path.join(image_processor.static_dir, dxf_filename)
+        layout_generator.generate_dxf(bounding_boxes, image_dims, dxf_path)
+
+        # 5. Construct Response
+        return {
+            "status": "success",
+            "risk_report": risk_report,
+            "images": {
+                "original": None,
+                "processed": f"/static/{os.path.basename(processed_path)}",
+            },
+            "cad": {"dxf_url": f"/static/{dxf_filename}"},
             "debug": {
                 "boxes_count": len(bounding_boxes),
                 "image_dims": image_dims,

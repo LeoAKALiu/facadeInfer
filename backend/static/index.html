@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Architectural AI Reverse Engineering Dashboard</title>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/remixicon/4.6.0/remixicon.min.css" rel="stylesheet">
+    <script type="text/javascript" src="https://api.map.baidu.com/api?type=webgl&v=1.0&ak=YOUR_BAIDU_MAPS_AK"></script>
     <style>
         :root {
             --bg-background: #09090b;
@@ -617,16 +618,20 @@
         <div class="header-right">
             <div id="aiStatus" style="display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--accent-success); margin-right: 12px;">
                 <span class="status-dot" style="box-shadow: 0 0 8px var(--accent-success);"></span>
-                System Ready: Demo Mode
+                AI Engine: Online
             </div>
-            <div class="btn btn-primary" onclick="showCaseSelector()">
-                <i class="ri-folder-open-line"></i>
-                Select Demo Case
+            <div class="btn btn-outline" onclick="document.getElementById('fileInput').click()">
+                <i class="ri-file-upload-line"></i>
+                Upload Image
             </div>
             <input type="file" id="fileInput" hidden accept="image/*">
-            <div class="btn btn-outline" onclick="location.reload()">
-                <i class="ri-refresh-line"></i>
-                Reset
+            <div class="btn btn-outline">
+                <i class="ri-settings-4-line"></i>
+                Settings
+            </div>
+            <div class="btn btn-primary" id="runBtn">
+                <i class="ri-play-fill"></i>
+                Run Analysis
             </div>
         </div>
     </header>
@@ -634,32 +639,39 @@
     <div class="main-container">
         <!-- Left Sidebar: Stepper -->
         <div class="sidebar">
-            <button class="step-item" onclick="runStep1()" disabled id="step1Btn">
+            <button class="step-item active" onclick="startRectification()">
                 <div class="step-indicator">1</div>
                 <div class="step-content">
-                    <div class="step-title">外观识别</div>
-                    <div class="step-desc">结构形式、建成年代及规模识别</div>
+                    <div class="step-title">畸变矫正</div>
+                    <div class="step-desc">自定义框选建筑立面区域</div>
                 </div>
             </button>
-            <button class="step-item" id="step2Btn" onclick="runStep2()" disabled>
+            <button class="step-item" id="aiStep" onclick="runAnalysis()">
                 <div class="step-indicator">2</div>
                 <div class="step-content">
-                    <div class="step-title">语义识别</div>
-                    <div class="step-desc">构件分割与坐标映射</div>
+                    <div class="step-title">AI 语义分析</div>
+                    <div class="step-desc">识别窗户、门、阳台等构件</div>
                 </div>
             </button>
-            <button class="step-item" id="step3Btn" onclick="runStep3()" disabled>
+            <button class="step-item" disabled>
                 <div class="step-indicator">3</div>
                 <div class="step-content">
-                    <div class="step-title">几何分析</div>
-                    <div class="step-desc">建筑开间与平面布局推测</div>
+                    <div class="step-title">风险评估</div>
+                    <div class="step-desc">计算窗墙比与结构健康度</div>
                 </div>
             </button>
-            <button class="step-item" id="step4Btn" onclick="runStep4()" disabled>
+            <button class="step-item" disabled>
                 <div class="step-indicator">4</div>
                 <div class="step-content">
-                    <div class="step-title">室内布局生成</div>
-                    <div class="step-desc">2D矢量平面图自动重建</div>
+                    <div class="step-title">CAD 生成</div>
+                    <div class="step-desc">自动转化为矢量 DXF 布局</div>
+                </div>
+            </button>
+            <button class="step-item" disabled id="downloadStep">
+                <div class="step-indicator">5</div>
+                <div class="step-content">
+                    <div class="step-title">下载成果</div>
+                    <div class="step-desc">获取分析报告与 CAD 图纸</div>
                 </div>
             </button>
         </div>
@@ -684,18 +696,30 @@
                     
                     <div id="detectionLayer" class="vis-layer" style="pointer-events: none;">
                     </div>
-                </div>
-            </div>
 
-            <!-- Case Selector Modal -->
-            <div id="caseSelectorModal" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.8); z-index: 1000; align-items: center; justify-content: center;">
-                <div style="background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 12px; padding: 32px; width: 600px; max-width: 90%;">
-                    <h2 style="margin-bottom: 24px; font-family: 'Inter-Bold';">Select Architectural Case</h2>
-                    <div id="caseList" style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 24px;">
-                        <!-- Case items will be injected here -->
+                    <!-- Rectification Selection Layer -->
+                    <div id="rectificationLayer" class="vis-layer" style="display: none; background: rgba(0,0,0,0.3); cursor: crosshair;">
+                        <div id="selectionCanvasContainer" style="position: absolute; inset: 0;">
+                            <canvas id="selectionCanvas" style="width: 100%; height: 100%;"></canvas>
+                        </div>
+                        <div id="selectionPoints" style="position: absolute; inset: 0; pointer-events: none;"></div>
+                        <div id="rectificationControls" style="position: absolute; top: 20px; left: 50%; transform: translateX(-50%); background: var(--bg-card); padding: 8px 16px; border-radius: 20px; border: 1px solid var(--border-color); color: white; font-size: 12px; display: flex; align-items: center; gap: 12px;">
+                            <span id="rectificationHint">Select 4 corners of the facade (Top-Left, Top-Right, Bottom-Right, Bottom-Left)</span>
+                            <button class="btn btn-primary" id="confirmRectBtn" style="height: 24px; padding: 0 8px; font-size: 10px; display: none;" onclick="confirmRectification()">Confirm</button>
+                            <button class="btn btn-outline" style="height: 24px; padding: 0 8px; font-size: 10px;" onclick="resetRectification()">Reset</button>
+                        </div>
                     </div>
-                    <div style="display: flex; justify-content: flex-end;">
-                        <button class="btn btn-outline" onclick="document.getElementById('caseSelectorModal').style.display='none'">Cancel</button>
+
+                    <div id="panoLayer" class="vis-layer" style="display: none; background: #000;">
+                        <div id="panoContainer" style="width: 100%; height: 100%;"></div>
+                        <div style="position: absolute; top: 20px; right: 20px; z-index: 1000; display: flex; gap: 8px;">
+                            <button class="btn btn-primary" style="height: 28px; font-size: 11px;" onclick="capturePano()">
+                                <i class="ri-camera-lens-line"></i> Analyze Current View
+                            </button>
+                            <button class="btn btn-outline" style="height: 28px; font-size: 11px; background: rgba(0,0,0,0.6);" onclick="closePano()">
+                                <i class="ri-close-line"></i> Exit Street View
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -711,78 +735,124 @@
         <!-- Right: Data Panel -->
         <div class="data-panel">
             
-            <!-- Section 1: Building Info -->
-            <div id="buildingInfoPanel" style="display: none;">
+            <div>
                 <div class="panel-section-title">
-                    建筑基本信息
-                    <i class="ri-building-line" style="color: var(--text-muted)"></i>
+                    Facade Library
+                    <i class="ri-map-pin-2-line" style="color: var(--text-muted)"></i>
+                </div>
+                <div class="data-card" style="padding: 8px; display: flex; flex-direction: column; gap: 8px;">
+                    <button class="btn btn-outline" style="width: 100%; justify-content: flex-start; height: 44px; border-style: dashed;" onclick="loadPanoBuilding('office')">
+                        <i class="ri-building-line" style="color: var(--accent-primary)"></i>
+                        <div style="text-align: left; margin-left: 4px;">
+                            <div style="font-size: 12px; font-family: 'Inter-Bold';">Commercial Office A</div>
+                            <div style="font-size: 10px; color: var(--text-muted);">Shanghai, Xuhui District</div>
+                        </div>
+                    </button>
+                    <button class="btn btn-outline" style="width: 100%; justify-content: flex-start; height: 44px; border-style: dashed;" onclick="loadPanoBuilding('apartment')">
+                        <i class="ri-community-line" style="color: var(--accent-success)"></i>
+                        <div style="text-align: left; margin-left: 4px;">
+                            <div style="font-size: 12px; font-family: 'Inter-Bold';">Residential Tower B</div>
+                            <div style="font-size: 10px; color: var(--text-muted);">Beijing, Chaoyang District</div>
+                        </div>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Section 1: Key Metrics -->
+            <div>
+                <div class="panel-section-title">
+                    Analysis Metrics
+                    <i class="ri-bar-chart-box-line" style="color: var(--text-muted)"></i>
                 </div>
                 <div class="data-card">
                     <div class="metric-row">
-                        <span class="metric-label">结构形式</span>
-                        <span class="metric-value" id="valStructure" style="font-size: 16px;">-</span>
+                        <span class="metric-label">Rectification Confidence</span>
+                        <span class="metric-value">94.2%</span>
                     </div>
-                    <div class="metric-row">
-                        <span class="metric-label">建成年代</span>
-                        <span class="metric-value" id="valYear" style="font-size: 16px;">-</span>
+                    <div class="progress-bar">
+                        <div class="progress-fill" style="width: 94.2%"></div>
                     </div>
-                    <div class="metric-row">
-                        <span class="metric-label">建筑用途</span>
-                        <span class="metric-value" id="valUse" style="font-size: 14px;">-</span>
+                    <div style="display: flex; justify-content: space-between; margin-top: 16px;">
+                        <div>
+                            <div class="metric-label">Perspective Loss</div>
+                            <div class="metric-val" style="font-family: 'Inter-Bold'; font-size: 16px;">0.042</div>
+                        </div>
+                        <div>
+                            <div class="metric-label">IoU Score</div>
+                            <div class="metric-val" style="font-family: 'Inter-Bold'; font-size: 16px;">0.89</div>
+                        </div>
                     </div>
                 </div>
             </div>
 
-            <!-- Section 2: Component Recognition -->
-            <div id="componentPanel" style="display: none;">
+            <!-- Section 2: Properties -->
+            <div>
                 <div class="panel-section-title">
-                    语义分割统计
-                    <i class="ri-scan-2-line" style="color: var(--text-muted)"></i>
+                    Geometric Properties
+                    <i class="ri-shape-line" style="color: var(--text-muted)"></i>
                 </div>
                 <div class="property-grid">
                     <div class="prop-item">
-                        <div class="prop-label">窗户数量</div>
-                        <div class="prop-val" id="countWindow">0</div>
+                        <div class="prop-label">Vanishing Pt X</div>
+                        <div class="prop-val">1024.5 px</div>
                     </div>
                     <div class="prop-item">
-                        <div class="prop-label">空调外机</div>
-                        <div class="prop-val" id="countAC">0</div>
+                        <div class="prop-label">Vanishing Pt Y</div>
+                        <div class="prop-val">540.2 px</div>
                     </div>
                     <div class="prop-item">
-                        <div class="prop-label">门/阳台</div>
-                        <div class="prop-val" id="countOther">0</div>
+                        <div class="prop-label">Aspect Ratio</div>
+                        <div class="prop-val">1.618</div>
                     </div>
                     <div class="prop-item">
-                        <div class="prop-label">识别置信度</div>
-                        <div class="prop-val">98.2%</div>
+                        <div class="prop-label">Skew Angle</div>
+                        <div class="prop-val">2.4°</div>
                     </div>
                 </div>
             </div>
 
-            <!-- Section 3: Geometric Analysis -->
-            <div id="geoPanel" style="display: none;">
+            <!-- Section 3: Detected Elements -->
+            <div>
                 <div class="panel-section-title">
-                    空间几何分析
-                    <i class="ri-ruler-2-line" style="color: var(--text-muted)"></i>
+                    Detected Elements
+                    <span style="font-size: 10px; background: var(--bg-muted); padding: 2px 6px; border-radius: 4px;">12 Items</span>
                 </div>
-                <div class="data-card">
-                    <div class="metric-row">
-                        <span class="metric-label">识别开间数</span>
-                        <span class="metric-value" id="valBays">-</span>
-                    </div>
-                    <div class="metric-row">
-                        <span class="metric-label">户型对称性</span>
-                        <span class="metric-value" id="valSymmetry">-</span>
-                    </div>
-                    <div style="margin-top: 12px; font-size: 12px; color: var(--text-secondary);">
-                        <div style="margin-bottom: 4px;"><i class="ri-map-pin-line" style="color: var(--accent-primary)"></i> 推测厨房: <span id="valKitchen">-</span></div>
-                        <div><i class="ri-map-pin-line" style="color: var(--accent-success)"></i> 推测卧室: <span id="valBedroom">-</span></div>
-                    </div>
+                <div class="data-card" style="padding: 0;">
+                   <table style="width: 100%; border-collapse: collapse; font-size: 12px;">
+                       <thead style="background: var(--bg-muted); text-align: left;">
+                           <tr>
+                               <th style="padding: 8px 12px; font-weight: normal; color: var(--text-muted);">Type</th>
+                               <th style="padding: 8px 12px; font-weight: normal; color: var(--text-muted);">Conf.</th>
+                               <th style="padding: 8px 12px; font-weight: normal; color: var(--text-muted);">Area</th>
+                           </tr>
+                       </thead>
+                       <tbody>
+                           <tr style="border-bottom: 1px solid var(--border-color);">
+                               <td style="padding: 8px 12px; color: var(--accent-primary);">Wall_Ext</td>
+                               <td style="padding: 8px 12px;">98%</td>
+                               <td style="padding: 8px 12px;">42m²</td>
+                           </tr>
+                           <tr style="border-bottom: 1px solid var(--border-color);">
+                               <td style="padding: 8px 12px; color: #f472b6;">Window_01</td>
+                               <td style="padding: 8px 12px;">92%</td>
+                               <td style="padding: 8px 12px;">2.4m²</td>
+                           </tr>
+                           <tr style="border-bottom: 1px solid var(--border-color);">
+                               <td style="padding: 8px 12px; color: #f472b6;">Window_02</td>
+                               <td style="padding: 8px 12px;">91%</td>
+                               <td style="padding: 8px 12px;">2.4m²</td>
+                           </tr>
+                           <tr>
+                               <td style="padding: 8px 12px; color: #fbbf24;">Door_Main</td>
+                               <td style="padding: 8px 12px;">95%</td>
+                               <td style="padding: 8px 12px;">3.1m²</td>
+                           </tr>
+                       </tbody>
+                   </table>
                 </div>
             </div>
 
             <!-- Section 4: Logs -->
-
             <div style="margin-top: auto;">
                 <div class="panel-section-title">
                     System Output
@@ -824,216 +894,199 @@
     </div>
 
     <script>
+        const fileInput = document.getElementById('fileInput');
+        const runBtn = document.getElementById('runBtn');
         const mainImage = document.getElementById('mainImage');
+        const rectificationLayer = document.getElementById('rectificationLayer');
+        const selectionCanvas = document.getElementById('selectionCanvas');
+        const ctx = selectionCanvas.getContext('2d');
         const rectificationHint = document.getElementById('rectificationHint');
         const confirmRectBtn = document.getElementById('confirmRectBtn');
+        const panoLayer = document.getElementById('panoLayer');
+        const panoContainer = document.getElementById('panoContainer');
         
-        let selectedCase = null;
+        let selectedFile = null;
+        let points = [];
         let originalImageDims = [0, 0];
+        let panorama = null;
 
-        const API_URL = location.origin;
+        const API_URL = "http://localhost:8000";
+        let BAIDU_AK = localStorage.getItem('baidu_ak') || 'YOUR_BAIDU_MAPS_AK';
 
-        async function showCaseSelector() {
-            const modal = document.getElementById('caseSelectorModal');
-            const list = document.getElementById('caseList');
-            modal.style.display = 'flex';
+        // Update script tag dynamically if AK is changed
+        function updateBaiduScript(ak) {
+            const oldScript = document.querySelector('script[src*="api.map.baidu.com"]');
+            if (oldScript) oldScript.remove();
             
-            try {
-                const res = await fetch(`${API_URL}/cases`);
-                const cases = await res.json();
-                list.innerHTML = '';
-                cases.forEach(c => {
-                    const div = document.createElement('div');
-                    div.style.cssText = 'background: var(--bg-muted); border: 1px solid var(--border-color); border-radius: 8px; overflow: hidden; cursor: pointer; transition: transform 0.2s;';
-                    div.innerHTML = `
-                        <img src="${API_URL}${c.thumbnail}" style="width: 100%; height: 120px; object-fit: cover;">
-                        <div style="padding: 12px; font-size: 13px; text-align: center;">${c.name}</div>
-                    `;
-                    div.onclick = () => selectCase(c);
-                    div.onmouseenter = () => div.style.transform = 'scale(1.05)';
-                    div.onmouseleave = () => div.style.transform = 'scale(1)';
-                    list.appendChild(div);
+            const script = document.createElement('script');
+            script.type = 'text/javascript';
+            script.src = `https://api.map.baidu.com/api?type=webgl&v=1.0&ak=${ak}`;
+            document.head.appendChild(script);
+        }
+
+        if (BAIDU_AK !== 'YOUR_BAIDU_MAPS_AK') {
+            updateBaiduScript(BAIDU_AK);
+        }
+
+        // Settings Button
+        document.querySelectorAll('.btn-outline').forEach(btn => {
+            if (btn.innerText.includes('Settings')) {
+                btn.onclick = () => {
+                    const ak = prompt("Enter Baidu Maps Browser Side AK:", BAIDU_AK);
+                    if (ak) {
+                        localStorage.setItem('baidu_ak', ak);
+                        BAIDU_AK = ak;
+                        location.reload(); // Reload to apply new script
+                    }
+                };
+            }
+        });
+
+        // Baidu Pano Logic
+        function loadPanoBuilding(type) {
+            panoLayer.style.display = 'block';
+            log(`Opening Street View for ${type}...`, 'info');
+            
+            const locations = {
+                'office': { lng: 121.5063, lat: 31.2363, heading: 270, pitch: 15 }, // Lujiazui
+                'apartment': { lng: 116.481, lat: 39.99, heading: 180, pitch: 10 } // Wangjing
+            };
+            
+            const loc = locations[type];
+            
+            if (!panorama) {
+                try {
+                    panorama = new BMapGL.Panorama('panoContainer');
+                } catch (e) {
+                    alert("Baidu Maps API failed to load. Please check your AK.");
+                    panoLayer.style.display = 'none';
+                    return;
+                }
+            }
+            
+            panorama.setPosition(new BMapGL.Point(loc.lng, loc.lat));
+            panorama.setPov({ heading: loc.heading, pitch: loc.pitch });
+        }
+
+        function closePano() {
+            panoLayer.style.display = 'none';
+        }
+
+        async function capturePano() {
+            if (!panorama) return;
+            log("Capturing street view for analysis...", 'info');
+            
+            // In a real implementation, we'd use a server-side proxy to fetch the static pano image
+            // for the current POV. For this demo, we'll simulate the "Hand-off" to AI.
+            
+            // 1. Hide Pano
+            panoLayer.style.display = 'none';
+            
+            // 2. Set the 'demo_rectified' as the source (simulated capture)
+            mainImage.src = "/static/demo_rectified.jpg";
+            mainImage.style.display = 'block';
+            
+            // 3. Auto-trigger next steps to show 'technical content'
+            log("View captured. Running structural parsing...", 'success');
+            setTimeout(() => {
+                runAnalysis();
+            }, 500);
+        }
+
+        function startRectification() {
+            if (!selectedFile) {
+                alert("Please upload an image first!");
+                return;
+            }
+            const rect = mainImage.parentElement.getBoundingClientRect();
+            selectionCanvas.width = rect.width;
+            selectionCanvas.height = rect.height;
+            
+            points = [];
+            rectificationLayer.style.display = 'block';
+            confirmRectBtn.style.display = 'none';
+            rectificationHint.innerText = "Click to define facade boundary. Click start point to close.";
+            log("Polyline mode active. Trace the facade outline.", 'info');
+            drawPoints();
+        }
+
+        rectificationLayer.addEventListener('click', e => {
+            const rect = rectificationLayer.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+            
+            if (x < 0 || x > rect.width || y < 0 || y > rect.height) return;
+
+            // Check for closure
+            if (points.length >= 3) {
+                const startP = points[0];
+                const dist = Math.sqrt((x - startP.x)**2 + (y - startP.y)**2);
+                if (dist < 20) {
+                    closePolygon();
+                    return;
+                }
+            }
+
+            points.push({x, y});
+            drawPoints();
+            rectificationHint.innerText = `Points: ${points.length}. Click near start to close.`;
+        });
+
+        function closePolygon() {
+            if (points.length < 3) return;
+            rectificationHint.innerText = "Polygon closed. Confirm to rectify facade.";
+            confirmRectBtn.style.display = 'block';
+            drawPoints(true);
+        }
+
+        function drawPoints(isClosed = false) {
+            ctx.clearRect(0, 0, selectionCanvas.width, selectionCanvas.height);
+            
+            ctx.strokeStyle = '#3b82f6';
+            ctx.lineWidth = 2;
+            ctx.setLineDash([5, 5]);
+
+            if (points.length > 0) {
+                ctx.beginPath();
+                ctx.moveTo(points[0].x, points[0].y);
+                for (let i = 1; i < points.length; i++) {
+                    ctx.lineTo(points[i].x, points[i].y);
+                }
+                
+                if (isClosed) {
+                    ctx.closePath();
+                    ctx.setLineDash([]);
+                    ctx.fillStyle = 'rgba(59, 130, 246, 0.3)';
+                    ctx.fill();
+                }
+                ctx.stroke();
+
+                // Draw handles
+                ctx.setLineDash([]);
+                points.forEach((p, i) => {
+                    ctx.fillStyle = i === 0 ? '#10b981' : '#3b82f6'; // Green for start
+                    ctx.beginPath();
+                    ctx.arc(p.x, p.y, 6, 0, Math.PI * 2);
+                    ctx.fill();
                 });
-            } catch (e) {
-                console.error("Failed to load cases", e);
             }
         }
 
-        async function selectCase(c) {
-            selectedCase = c;
-            document.getElementById('caseSelectorModal').style.display = 'none';
-            mainImage.src = `${API_URL}${c.thumbnail}`;
-            mainImage.style.display = 'block';
-            mainImage.style.objectFit = 'fill';
-            log(`Selected case: ${c.name}`, 'info');
-            
-            // Enable Step 1
-            document.getElementById('step1Btn').disabled = false;
-            document.getElementById('step1Btn').classList.add('active');
-            
-            // Clear previous results
-            document.getElementById('detectionLayer').innerHTML = '';
-            document.getElementById('buildingInfoPanel').style.display = 'none';
-            document.getElementById('componentPanel').style.display = 'none';
-            document.getElementById('geoPanel').style.display = 'none';
+        function resetRectification() {
+            points = [];
+            drawPoints();
+            rectificationHint.innerText = "Click to define facade boundary. Click start point to close.";
+            confirmRectBtn.style.display = 'none';
         }
 
-        function runStep1() {
-            if (!selectedCase) return;
-            log("Identifying building structure and scale...", 'info');
-            
-            // Update Right Panel
-            document.getElementById('buildingInfoPanel').style.display = 'block';
-            document.getElementById('valStructure').innerText = selectedCase.step1_info.structure;
-            document.getElementById('valYear').innerText = selectedCase.step1_info.year;
-            document.getElementById('valUse').innerText = selectedCase.step1_info.use;
-            
-            log("Appearance recognition complete.", 'success');
-            log("Matching drawing database...", 'info');
-            
-            setTimeout(() => {
-                log("Database match found. Proceed to semantic recognition.", 'success');
-                document.getElementById('step2Btn').disabled = false;
-                document.getElementById('step2Btn').classList.add('active');
-            }, 1000);
+        function confirmRectification() {
+            log("Rectification confirmed. Points stored.", 'success');
+            rectificationLayer.style.display = 'none';
+            document.getElementById('aiStep').classList.add('active');
+            document.getElementById('aiStep').disabled = false;
         }
 
-        async function runStep2() {
-            if (!selectedCase) return;
-            log("Applying perspective rectification...", 'info');
-            
-            // Transition to ortho image
-            mainImage.style.opacity = '0';
-            setTimeout(async () => {
-                mainImage.src = `${API_URL}/static/demo_data/${selectedCase.id}_ortho.jpg`;
-                mainImage.style.opacity = '1';
-                log("Geometric distortion corrected.", 'success');
-
-                log("Executing Semantic Parsing...", 'info');
-                const formData = new FormData();
-                formData.append('case_id', selectedCase.id);
-
-                try {
-                    const res = await fetch(`${API_URL}/analyze_demo`, { method: 'POST', body: formData });
-                    const data = await res.json();
-                    
-                    // Update Right Panel
-                    document.getElementById('componentPanel').style.display = 'block';
-                    document.getElementById('countWindow').innerText = data.counts.window;
-                    document.getElementById('countAC').innerText = data.counts.ac;
-                    document.getElementById('countOther').innerText = data.counts.door;
-                    
-                    renderDetections(data.debug.raw_boxes, data.debug.image_dims);
-                    log(`Detected ${data.debug.boxes_count} components.`, 'success');
-                    
-                    document.getElementById('step3Btn').disabled = false;
-                    document.getElementById('step3Btn').classList.add('active');
-                } catch (e) {
-                    log("Semantic identification failed.", 'warn');
-                }
-            }, 600);
-        }
-
-        function runStep3() {
-            if (!selectedCase) return;
-            log("Analyzing facade geometry...", 'info');
-            
-            // Visual: Add vertical dashed lines to windows
-            const layer = document.getElementById('detectionLayer');
-            const windows = Array.from(layer.querySelectorAll('div')).filter(el => el.innerText.includes('window'));
-            
-            // Find columns (group by X within tolerance)
-            const cols = {};
-            windows.forEach(win => {
-                const x = parseInt(win.style.left);
-                const matchedX = Object.keys(cols).find(cx => Math.abs(parseInt(cx) - x) < 30);
-                if (matchedX) cols[matchedX].push(win);
-                else cols[x] = [win];
-            });
-
-            Object.values(cols).forEach(col => {
-                if (col.length < 2) return;
-                const sorted = col.sort((a, b) => parseInt(a.style.top) - parseInt(b.style.top));
-                const first = sorted[0];
-                const last = sorted[sorted.length-1];
-                
-                const line = document.createElement('div');
-                line.style.cssText = `
-                    position: absolute;
-                    left: ${parseInt(first.style.left) + parseInt(first.style.width)/2}px;
-                    top: ${first.style.top};
-                    width: 0;
-                    height: ${parseInt(last.style.top) - parseInt(first.style.top) + parseInt(last.style.height)}px;
-                    border-left: 2px dashed rgba(255,255,255,0.4);
-                    pointer-events: none;
-                    z-index: 5;
-                `;
-                layer.appendChild(line);
-            });
-
-            // Update Right Panel
-            document.getElementById('geoPanel').style.display = 'block';
-            document.getElementById('valBays').innerText = selectedCase.step3_info.bays;
-            document.getElementById('valSymmetry').innerText = selectedCase.step3_info.symmetry;
-            document.getElementById('valKitchen').innerText = selectedCase.step3_info.kitchen_est;
-            document.getElementById('valBedroom').innerText = selectedCase.step3_info.bedroom_est;
-
-            log("Spatial structure analyzed.", 'success');
-            document.getElementById('step4Btn').disabled = false;
-            document.getElementById('step4Btn').classList.add('active');
-        }
-
-        function runStep4() {
-            if (!selectedCase) return;
-            log("Generating interior floor plan...", 'info');
-            
-            // Replace viewpoint content with iframe
-            const viewport = document.querySelector('.viewport-content');
-            viewport.innerHTML = `
-                <iframe src="/static/floor_plan.html" style="width: 100%; height: 100%; border: none; background: white;"></iframe>
-            `;
-            
-            log("Plan generation complete. Showing interior layout.", 'success');
-            document.querySelectorAll('.step-item').forEach(btn => btn.classList.remove('active'));
-            document.getElementById('step4Btn').classList.add('completed');
-        }
-
-        function renderDetections(boxes, dims) {
-            const layer = document.getElementById('detectionLayer');
-            if (!layer) return;
-            layer.innerHTML = '';
-            
-            const rect = layer.getBoundingClientRect();
-            const scaleX = rect.width / dims[0];
-            const scaleY = rect.height / dims[1];
-
-            boxes.forEach(box => {
-                const [label, x, y, w, h] = box;
-                const div = document.createElement('div');
-                div.style.position = 'absolute';
-                div.style.left = `${x * scaleX}px`;
-                div.style.top = `${y * scaleY}px`;
-                div.style.width = `${w * scaleX}px`;
-                div.style.height = `${h * scaleY}px`;
-                div.style.border = `1px solid ${label === 'window' ? '#f472b6' : '#fbbf24'}`;
-                div.style.backgroundColor = `rgba(${label === 'window' ? '244, 114, 182' : '251, 191, 36'}, 0.15)`;
-                
-                const labelSpan = document.createElement('span');
-                labelSpan.innerText = label;
-                labelSpan.style.position = 'absolute';
-                labelSpan.style.top = '-14px';
-                labelSpan.style.left = '0';
-                labelSpan.style.fontSize = '10px';
-                labelSpan.style.color = 'white';
-                labelSpan.style.backgroundColor = label === 'window' ? '#f472b6' : '#fbbf24';
-                labelSpan.style.padding = '0 4px';
-                labelSpan.style.borderRadius = '2px';
-                
-                div.appendChild(labelSpan);
-                layer.appendChild(div);
-            });
-        }
-
+        // Logger function
         function log(msg, type='info') {
             const container = document.querySelector('.log-container');
             const entry = document.createElement('div');
@@ -1043,6 +1096,98 @@
             container.appendChild(entry);
             container.scrollTop = container.scrollHeight;
         }
+
+        // File Selection
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) {
+                selectedFile = e.target.files[0];
+                log(`File selected: ${selectedFile.name}`, 'info');
+                
+                // Preview
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    mainImage.src = e.target.result;
+                    mainImage.style.display = 'block';
+                    
+                    // Reset rectification points on new upload
+                    points = [];
+                    
+                    const tempImg = new Image();
+                    tempImg.onload = () => {
+                        originalImageDims = [tempImg.width, tempImg.height];
+                    };
+                    tempImg.src = e.target.result;
+                }
+                reader.readAsDataURL(selectedFile);
+            }
+        });
+
+        // Run Analysis
+        async function runAnalysis() {
+            if (!selectedFile) {
+                alert("Please select an image first!");
+                return;
+            }
+
+            log("Starting AI analysis...", 'info');
+            const formData = new FormData();
+            formData.append('file', selectedFile);
+            
+            // Map selected points to original image dimensions
+            if (points.length === 4) {
+                const imgRect = mainImage.getBoundingClientRect();
+                const scaleX = originalImageDims[0] / imgRect.width;
+                const scaleY = originalImageDims[1] / imgRect.height;
+                
+                const corners = points.map(p => [p.x * scaleX, p.y * scaleY]);
+                formData.append('corners', JSON.stringify(corners));
+                log("Applying perspective rectification...", 'info');
+            }
+
+            try {
+                log("Uploading and processing with SegFormer AI...", 'info');
+                const response = await fetch(`${API_URL}/analyze`, {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (!response.ok) throw new Error("Analysis failed");
+
+                const data = await response.json();
+                log(`Analysis complete! Detected ${data.debug.boxes_count} elements.`, 'success');
+                console.log(data);
+
+                // Update UI with results
+                updateMetrics(data.risk_report);
+                updateElementsTable(data.debug.raw_boxes || []);
+                renderDetections(data.debug.raw_boxes || [], data.debug.image_dims);
+                
+                if (data.images.processed) {
+                    mainImage.src = `${API_URL}${data.images.processed}`;
+                    log("Loaded processed visualization.", 'success');
+                }
+                
+                if (data.cad.dxf_url) {
+                    const downloadBtn = document.createElement('a');
+                    downloadBtn.href = `${API_URL}${data.cad.dxf_url}`;
+                    downloadBtn.download = "layout.dxf";
+                    downloadBtn.className = "btn btn-outline";
+                    downloadBtn.style.marginTop = "10px";
+                    downloadBtn.innerHTML = '<i class="ri-download-line"></i> Download DXF';
+                    document.querySelector('.data-panel').prepend(downloadBtn);
+                    log("CAD file generated.", 'success');
+                    
+                    document.getElementById('downloadStep').classList.add('completed');
+                    document.getElementById('downloadStep').disabled = false;
+                }
+
+            } catch (error) {
+                log(`Error: ${error.message}`, 'warn');
+                console.error(error);
+            }
+        }
+
+        runBtn.addEventListener('click', runAnalysis);
 
         function updateMetrics(report) {
             // Helper to find metric elements by text content (fragile but quick for demo)
