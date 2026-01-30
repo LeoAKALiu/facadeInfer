@@ -1,0 +1,23 @@
+data/
+outputs/
+backend/uploads/
+*.jpg
+!backend/static/demo_rectified.jpg
+*.JPG
+*.png
+*.dxf
+facade_rectification.py
+facade_rectification_v2.py
+demo_facade.py
+map_annotation.py
+facade_ortho_expert.py
+verify_ai.py
+test_pipeline.py
+debug_viz.py
+get_labels.py
+.env
+.sisyphus/
+# Keep backend/static/index.html and backend/static/demo_rectified.jpg
+# But ignore other stuff in static if any
+backend/static/*.dxf
+backend/static/processed_*
