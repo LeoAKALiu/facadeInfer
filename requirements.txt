@@ -2,10 +2,7 @@ fastapi
 uvicorn
 python-multipart
 opencv-python-headless
-ultralytics
 ezdxf
 numpy
-pandas
-pytest
-httpx
-jinja2
+Pillow
+python-dotenv
