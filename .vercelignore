@@ -1,5 +1,7 @@
-# Keep data/demo for the live demo
-!data/demo/
+# Keep static demo assets
+!backend/static/demo_data/
+!backend/static/floor_plan.html
+data/
 outputs/
 backend/uploads/
 *.jpg

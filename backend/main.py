@@ -1,19 +1,19 @@
 import os
 import sys
-
-# Add the current directory to sys.path to support both local run and Vercel deployment
-sys.path.append(os.path.dirname(__file__))
-
+import json
+import numpy as np
 from fastapi import FastAPI, UploadFile, File, HTTPException, Form
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
+from PIL import Image
+
+# Add current dir to path
+sys.path.append(os.path.dirname(__file__))
+
 from core.image_processor import ImageProcessor
 from core.semantic_analyzer import SemanticAnalyzer
 from core.layout_generator import LayoutGenerator
-import os
-import shutil
-import json
 
 app = FastAPI()
 
@@ -30,22 +30,12 @@ app.add_middleware(
 static_abs_path = os.path.join(os.path.dirname(__file__), "static")
 app.mount("/static", StaticFiles(directory=static_abs_path), name="static")
 
-# Mount Demo Data
-demo_data_path = os.path.abspath(
-    os.path.join(os.path.dirname(__file__), "..", "data", "demo")
-)
-if os.path.exists(demo_data_path):
-    app.mount("/demo_data", StaticFiles(directory=demo_data_path), name="demo_data")
-
 # Initialize Processors
-# Use /tmp for uploads on Vercel
 UPLOAD_DIR = "/tmp" if os.environ.get("VERCEL") else "uploads"
-STATIC_DIR = os.path.join(os.path.dirname(__file__), "static")
+STATIC_DIR = static_abs_path
 
-# Don't create directories at module level if on Vercel
-if not os.environ.get("VERCEL"):
-    if not os.path.exists(UPLOAD_DIR):
-        os.makedirs(UPLOAD_DIR, exist_ok=True)
+if not os.environ.get("VERCEL") and not os.path.exists(UPLOAD_DIR):
+    os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 image_processor = ImageProcessor(upload_dir=UPLOAD_DIR, static_dir=STATIC_DIR)
 semantic_analyzer = SemanticAnalyzer()
@@ -54,28 +44,63 @@ layout_generator = LayoutGenerator()
 
 @app.get("/")
 async def root():
-    index_path = os.path.join(os.path.dirname(__file__), "static", "index.html")
-    return FileResponse(index_path)
+    return FileResponse(os.path.join(static_abs_path, "index.html"))
 
 
 @app.get("/cases")
 async def get_cases():
-    # Hardcoded cases for the demo
+    # Hardcoded rich metadata for the 4-step demo
     return [
         {
             "id": "IMG_1397",
-            "name": "Facade Case A",
-            "thumbnail": "/demo_data/IMG_1397.JPG",
+            "name": "Commercial Office A",
+            "thumbnail": "/static/demo_data/IMG_1397.JPG",
+            "step1_info": {
+                "structure": "RC Frame",
+                "year": "1995-2005",
+                "use": "Commercial/Office",
+                "area_est": "2400 m²",
+            },
+            "step3_info": {
+                "bays": 6,
+                "symmetry": "High",
+                "kitchen_est": "North side columns",
+                "bedroom_est": "South facing bays",
+            },
         },
         {
             "id": "IMG_1398",
-            "name": "Facade Case B",
-            "thumbnail": "/demo_data/IMG_1398.JPG",
+            "name": "Residential Tower B",
+            "thumbnail": "/static/demo_data/IMG_1398.JPG",
+            "step1_info": {
+                "structure": "Shear Wall",
+                "year": "2010-2020",
+                "use": "Residential",
+                "area_est": "5600 m²",
+            },
+            "step3_info": {
+                "bays": 8,
+                "symmetry": "Bilateral",
+                "kitchen_est": "Inner courtyard side",
+                "bedroom_est": "Main facade windows",
+            },
         },
         {
             "id": "IMG_1399",
             "name": "Facade Case C",
-            "thumbnail": "/demo_data/IMG_1399.JPG",
+            "thumbnail": "/static/demo_data/IMG_1399.JPG",
+            "step1_info": {
+                "structure": "Masonry-Concrete Mix",
+                "year": "1980s",
+                "use": "Residential/Old Town",
+                "area_est": "1200 m²",
+            },
+            "step3_info": {
+                "bays": 4,
+                "symmetry": "Low",
+                "kitchen_est": "Rear extensions",
+                "bedroom_est": "Street facing windows",
+            },
         },
     ]
 
@@ -83,9 +108,9 @@ async def get_cases():
 @app.post("/analyze_demo")
 async def analyze_demo(case_id: str = Form(...)):
     try:
-        # 1. Load pre-annotated data
-        json_path = os.path.join(demo_data_path, f"{case_id}_ortho.json")
-        img_path = os.path.join(demo_data_path, f"{case_id}_ortho.jpg")
+        demo_data_dir = os.path.join(static_abs_path, "demo_data")
+        json_path = os.path.join(demo_data_dir, f"{case_id}_ortho.json")
+        img_path = os.path.join(demo_data_dir, f"{case_id}_ortho.jpg")
 
         if not os.path.exists(json_path):
             raise HTTPException(status_code=404, detail="Demo data not found")
@@ -93,149 +118,46 @@ async def analyze_demo(case_id: str = Form(...)):
         with open(json_path, "r") as f:
             data = json.load(f)
 
-        # 2. Convert LabelMe shapes to bounding boxes
         bounding_boxes = []
+        counts = {"window": 0, "ac": 0, "door": 0, "other": 0}
+
         for shape in data["shapes"]:
             pts = np.array(shape["points"])
             x_min, y_min = pts.min(axis=0)
             x_max, y_max = pts.max(axis=0)
             w = x_max - x_min
             h = y_max - y_min
-            bounding_boxes.append(
-                [shape["label"], int(x_min), int(y_min), int(w), int(h)]
-            )
+            label = shape["label"]
+            bounding_boxes.append([label, int(x_min), int(y_min), int(w), int(h)])
 
-        # Get image dimensions from the file
-        from PIL import Image
+            if "window" in label:
+                counts["window"] += 1
+            elif "ac" in label:
+                counts["ac"] += 1
+            elif "door" in label:
+                counts["door"] += 1
+            else:
+                counts["other"] += 1
 
         with Image.open(img_path) as img:
-            image_dims = img.size  # (W, H)
+            image_dims = img.size
 
-        # 3. Analyze
         risk_report = semantic_analyzer.analyze(bounding_boxes, image_dims)
-
-        # 4. Generate DXF
-        dxf_filename = f"demo_{case_id}.dxf"
-        dxf_path = os.path.join(static_abs_path, dxf_filename)
-        if not os.environ.get("VERCEL"):
-            layout_generator.generate_dxf(bounding_boxes, image_dims, dxf_path)
-        else:
-            # On Vercel, just use a placeholder or reuse if exists
-            dxf_filename = "demo_layout.dxf"
 
         return {
             "status": "success",
             "risk_report": risk_report,
+            "counts": counts,
             "images": {
-                "original": f"/demo_data/{case_id}.JPG",
-                "processed": f"/demo_data/{case_id}_ortho.jpg",
+                "original": f"/static/demo_data/{case_id}.JPG",
+                "processed": f"/static/demo_data/{case_id}_ortho.jpg",
             },
-            "cad": {"dxf_url": f"/static/{dxf_filename}"},
             "debug": {
                 "boxes_count": len(bounding_boxes),
                 "image_dims": image_dims,
                 "raw_boxes": bounding_boxes,
             },
         }
-    except Exception as e:
-        import traceback
-
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@app.post("/analyze")
-async def analyze_facade(file: UploadFile = File(...), corners: str = Form(None)):
-    try:
-        is_demo = True
-
-        if is_demo:
-            filename = file.filename
-            upload_path = os.path.join(image_processor.upload_dir, filename)
-            with open(upload_path, "wb") as buffer:
-                shutil.copyfileobj(file.file, buffer)
-
-            bounding_boxes = [
-                ["window", 150, 100, 120, 160],
-                ["window", 320, 100, 120, 160],
-                ["window", 490, 100, 120, 160],
-                ["window", 660, 100, 120, 160],
-                ["window", 150, 320, 120, 160],
-                ["window", 320, 320, 120, 160],
-                ["window", 490, 320, 120, 160],
-                ["window", 660, 320, 120, 160],
-                ["door", 380, 550, 160, 220],
-                ["window", 150, 580, 120, 160],
-                ["window", 660, 580, 120, 160],
-            ]
-            image_dims = (1024, 800)
-
-            risk_report = {
-                "risk_soft_story": "LOW",
-                "wwr": 0.32,
-                "story_count": 3,
-                "estimated_structure": "RC Frame (Reinforced)",
-            }
-
-            # Skip generating DXF on Vercel to avoid read-only filesystem crash
-            dxf_filename = "demo_layout.dxf"
-            if not os.environ.get("VERCEL"):
-                dxf_path = os.path.join(image_processor.static_dir, dxf_filename)
-                layout_generator.generate_dxf(bounding_boxes, image_dims, dxf_path)
-
-            return {
-                "status": "success",
-                "risk_report": risk_report,
-                "images": {
-                    "original": None,
-                    "processed": "/static/demo_rectified.jpg",
-                },
-                "cad": {"dxf_url": f"/static/{dxf_filename}"},
-                "debug": {
-                    "boxes_count": len(bounding_boxes),
-                    "image_dims": image_dims,
-                    "raw_boxes": bounding_boxes,
-                },
-            }
-
-        parsed_corners = None
-
-        if corners:
-            parsed_corners = json.loads(corners)
-
-        filename = file.filename
-        upload_path = os.path.join(image_processor.upload_dir, filename)
-        with open(upload_path, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
-
-        processed_path, bounding_boxes, image_dims = image_processor.process(
-            upload_path, corners=parsed_corners
-        )
-
-        # 3. Analyze Semantics (Risk Assessment)
-        risk_report = semantic_analyzer.analyze(bounding_boxes, image_dims)
-
-        # 4. Generate CAD Layout
-        dxf_filename = f"layout_{os.path.splitext(filename)[0]}.dxf"
-        dxf_path = os.path.join(image_processor.static_dir, dxf_filename)
-        layout_generator.generate_dxf(bounding_boxes, image_dims, dxf_path)
-
-        # 5. Construct Response
-        return {
-            "status": "success",
-            "risk_report": risk_report,
-            "images": {
-                "original": f"/static/{filename}" if False else None,
-                "processed": f"/static/{os.path.basename(processed_path)}",
-            },
-            "cad": {"dxf_url": f"/static/{dxf_filename}"},
-            "debug": {
-                "boxes_count": len(bounding_boxes),
-                "image_dims": image_dims,
-                "raw_boxes": bounding_boxes,
-            },
-        }
-
     except Exception as e:
         import traceback
 

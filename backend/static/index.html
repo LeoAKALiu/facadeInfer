@@ -634,39 +634,32 @@
     <div class="main-container">
         <!-- Left Sidebar: Stepper -->
         <div class="sidebar">
-            <button class="step-item active" onclick="startRectification()">
+            <button class="step-item" onclick="runStep1()" disabled id="step1Btn">
                 <div class="step-indicator">1</div>
                 <div class="step-content">
-                    <div class="step-title">畸变矫正</div>
-                    <div class="step-desc">自定义框选建筑立面区域</div>
+                    <div class="step-title">外观识别</div>
+                    <div class="step-desc">结构形式、建成年代及规模识别</div>
                 </div>
             </button>
-            <button class="step-item" id="aiStep" onclick="runAnalysis()">
+            <button class="step-item" id="step2Btn" onclick="runStep2()" disabled>
                 <div class="step-indicator">2</div>
                 <div class="step-content">
-                    <div class="step-title">AI 语义分析</div>
-                    <div class="step-desc">识别窗户、门、阳台等构件</div>
+                    <div class="step-title">语义识别</div>
+                    <div class="step-desc">构件分割与坐标映射</div>
                 </div>
             </button>
-            <button class="step-item" disabled>
+            <button class="step-item" id="step3Btn" onclick="runStep3()" disabled>
                 <div class="step-indicator">3</div>
                 <div class="step-content">
-                    <div class="step-title">风险评估</div>
-                    <div class="step-desc">计算窗墙比与结构健康度</div>
+                    <div class="step-title">几何分析</div>
+                    <div class="step-desc">建筑开间与平面布局推测</div>
                 </div>
             </button>
-            <button class="step-item" disabled>
+            <button class="step-item" id="step4Btn" onclick="runStep4()" disabled>
                 <div class="step-indicator">4</div>
                 <div class="step-content">
-                    <div class="step-title">CAD 生成</div>
-                    <div class="step-desc">自动转化为矢量 DXF 布局</div>
-                </div>
-            </button>
-            <button class="step-item" disabled id="downloadStep">
-                <div class="step-indicator">5</div>
-                <div class="step-content">
-                    <div class="step-title">下载成果</div>
-                    <div class="step-desc">获取分析报告与 CAD 图纸</div>
+                    <div class="step-title">室内布局生成</div>
+                    <div class="step-desc">2D矢量平面图自动重建</div>
                 </div>
             </button>
         </div>
@@ -690,19 +683,6 @@
                     </div>
                     
                     <div id="detectionLayer" class="vis-layer" style="pointer-events: none;">
-                    </div>
-
-                    <!-- Rectification Selection Layer -->
-                    <div id="rectificationLayer" class="vis-layer" style="display: none; background: rgba(0,0,0,0.3); cursor: crosshair;">
-                        <div id="selectionCanvasContainer" style="position: absolute; inset: 0;">
-                            <canvas id="selectionCanvas" style="width: 100%; height: 100%;"></canvas>
-                        </div>
-                        <div id="selectionPoints" style="position: absolute; inset: 0; pointer-events: none;"></div>
-                        <div id="rectificationControls" style="position: absolute; top: 20px; left: 50%; transform: translateX(-50%); background: var(--bg-card); padding: 8px 16px; border-radius: 20px; border: 1px solid var(--border-color); color: white; font-size: 12px; display: flex; align-items: center; gap: 12px;">
-                            <span id="rectificationHint">Select 4 corners of the facade (Top-Left, Top-Right, Bottom-Right, Bottom-Left)</span>
-                            <button class="btn btn-primary" id="confirmRectBtn" style="height: 24px; padding: 0 8px; font-size: 10px; display: none;" onclick="confirmRectification()">Confirm</button>
-                            <button class="btn btn-outline" style="height: 24px; padding: 0 8px; font-size: 10px;" onclick="resetRectification()">Reset</button>
-                        </div>
                     </div>
                 </div>
             </div>
@@ -731,101 +711,78 @@
         <!-- Right: Data Panel -->
         <div class="data-panel">
             
-            <!-- Section 1: Key Metrics -->
-            <div>
+            <!-- Section 1: Building Info -->
+            <div id="buildingInfoPanel" style="display: none;">
                 <div class="panel-section-title">
-                    Analysis Metrics
-                    <i class="ri-bar-chart-box-line" style="color: var(--text-muted)"></i>
+                    建筑基本信息
+                    <i class="ri-building-line" style="color: var(--text-muted)"></i>
                 </div>
                 <div class="data-card">
                     <div class="metric-row">
-                        <span class="metric-label">Rectification Confidence</span>
-                        <span class="metric-value">94.2%</span>
+                        <span class="metric-label">结构形式</span>
+                        <span class="metric-value" id="valStructure" style="font-size: 16px;">-</span>
                     </div>
-                    <div class="progress-bar">
-                        <div class="progress-fill" style="width: 94.2%"></div>
+                    <div class="metric-row">
+                        <span class="metric-label">建成年代</span>
+                        <span class="metric-value" id="valYear" style="font-size: 16px;">-</span>
                     </div>
-                    <div style="display: flex; justify-content: space-between; margin-top: 16px;">
-                        <div>
-                            <div class="metric-label">Perspective Loss</div>
-                            <div class="metric-val" style="font-family: 'Inter-Bold'; font-size: 16px;">0.042</div>
-                        </div>
-                        <div>
-                            <div class="metric-label">IoU Score</div>
-                            <div class="metric-val" style="font-family: 'Inter-Bold'; font-size: 16px;">0.89</div>
-                        </div>
+                    <div class="metric-row">
+                        <span class="metric-label">建筑用途</span>
+                        <span class="metric-value" id="valUse" style="font-size: 14px;">-</span>
                     </div>
                 </div>
             </div>
 
-            <!-- Section 2: Properties -->
-            <div>
+            <!-- Section 2: Component Recognition -->
+            <div id="componentPanel" style="display: none;">
                 <div class="panel-section-title">
-                    Geometric Properties
-                    <i class="ri-shape-line" style="color: var(--text-muted)"></i>
+                    语义分割统计
+                    <i class="ri-scan-2-line" style="color: var(--text-muted)"></i>
                 </div>
                 <div class="property-grid">
                     <div class="prop-item">
-                        <div class="prop-label">Vanishing Pt X</div>
-                        <div class="prop-val">1024.5 px</div>
+                        <div class="prop-label">窗户数量</div>
+                        <div class="prop-val" id="countWindow">0</div>
                     </div>
                     <div class="prop-item">
-                        <div class="prop-label">Vanishing Pt Y</div>
-                        <div class="prop-val">540.2 px</div>
+                        <div class="prop-label">空调外机</div>
+                        <div class="prop-val" id="countAC">0</div>
                     </div>
                     <div class="prop-item">
-                        <div class="prop-label">Aspect Ratio</div>
-                        <div class="prop-val">1.618</div>
+                        <div class="prop-label">门/阳台</div>
+                        <div class="prop-val" id="countOther">0</div>
                     </div>
                     <div class="prop-item">
-                        <div class="prop-label">Skew Angle</div>
-                        <div class="prop-val">2.4°</div>
+                        <div class="prop-label">识别置信度</div>
+                        <div class="prop-val">98.2%</div>
                     </div>
                 </div>
             </div>
 
-            <!-- Section 3: Detected Elements -->
-            <div>
+            <!-- Section 3: Geometric Analysis -->
+            <div id="geoPanel" style="display: none;">
                 <div class="panel-section-title">
-                    Detected Elements
-                    <span style="font-size: 10px; background: var(--bg-muted); padding: 2px 6px; border-radius: 4px;">12 Items</span>
+                    空间几何分析
+                    <i class="ri-ruler-2-line" style="color: var(--text-muted)"></i>
                 </div>
-                <div class="data-card" style="padding: 0;">
-                   <table style="width: 100%; border-collapse: collapse; font-size: 12px;">
-                       <thead style="background: var(--bg-muted); text-align: left;">
-                           <tr>
-                               <th style="padding: 8px 12px; font-weight: normal; color: var(--text-muted);">Type</th>
-                               <th style="padding: 8px 12px; font-weight: normal; color: var(--text-muted);">Conf.</th>
-                               <th style="padding: 8px 12px; font-weight: normal; color: var(--text-muted);">Area</th>
-                           </tr>
-                       </thead>
-                       <tbody>
-                           <tr style="border-bottom: 1px solid var(--border-color);">
-                               <td style="padding: 8px 12px; color: var(--accent-primary);">Wall_Ext</td>
-                               <td style="padding: 8px 12px;">98%</td>
-                               <td style="padding: 8px 12px;">42m²</td>
-                           </tr>
-                           <tr style="border-bottom: 1px solid var(--border-color);">
-                               <td style="padding: 8px 12px; color: #f472b6;">Window_01</td>
-                               <td style="padding: 8px 12px;">92%</td>
-                               <td style="padding: 8px 12px;">2.4m²</td>
-                           </tr>
-                           <tr style="border-bottom: 1px solid var(--border-color);">
-                               <td style="padding: 8px 12px; color: #f472b6;">Window_02</td>
-                               <td style="padding: 8px 12px;">91%</td>
-                               <td style="padding: 8px 12px;">2.4m²</td>
-                           </tr>
-                           <tr>
-                               <td style="padding: 8px 12px; color: #fbbf24;">Door_Main</td>
-                               <td style="padding: 8px 12px;">95%</td>
-                               <td style="padding: 8px 12px;">3.1m²</td>
-                           </tr>
-                       </tbody>
-                   </table>
+                <div class="data-card">
+                    <div class="metric-row">
+                        <span class="metric-label">识别开间数</span>
+                        <span class="metric-value" id="valBays">-</span>
+                    </div>
+                    <div class="metric-row">
+                        <span class="metric-label">户型对称性</span>
+                        <span class="metric-value" id="valSymmetry">-</span>
+                    </div>
+                    <div style="margin-top: 12px; font-size: 12px; color: var(--text-secondary);">
+                        <div style="margin-bottom: 4px;"><i class="ri-map-pin-line" style="color: var(--accent-primary)"></i> 推测厨房: <span id="valKitchen">-</span></div>
+                        <div><i class="ri-map-pin-line" style="color: var(--accent-success)"></i> 推测卧室: <span id="valBedroom">-</span></div>
+                    </div>
                 </div>
             </div>
 
             <!-- Section 4: Logs -->
+
             <div style="margin-top: auto;">
                 <div class="panel-section-title">
                     System Output
@@ -902,88 +859,189 @@
             }
         }
 
-        function selectCase(c) {
+        async function selectCase(c) {
             selectedCase = c;
             document.getElementById('caseSelectorModal').style.display = 'none';
             mainImage.src = `${API_URL}${c.thumbnail}`;
             mainImage.style.display = 'block';
-            mainImage.style.objectFit = 'fill'; // Fill area as requested
+            mainImage.style.objectFit = 'fill';
             log(`Selected case: ${c.name}`, 'info');
             
             // Enable Step 1
-            const step1 = document.querySelectorAll('.step-item')[0];
-            step1.classList.add('active');
-            step1.disabled = false;
-        }
-
-        async function startRectification() {
-            if (!selectedCase) {
-                alert("Please select a case first!");
-                return;
-            }
-            log("Applying perspective rectification matrix...", 'info');
+            document.getElementById('step1Btn').disabled = false;
+            document.getElementById('step1Btn').classList.add('active');
             
-            // Simulation of transition
-            mainImage.style.opacity = '0';
-            setTimeout(() => {
-                mainImage.src = `${API_URL}/demo_data/${selectedCase.id}_ortho.jpg`;
-                mainImage.style.objectFit = 'fill'; // Rectified fills area
-                mainImage.style.opacity = '1';
-                log("Rectification complete. View normalized.", 'success');
-                
-                // Enable AI Step
-                const aiStep = document.getElementById('aiStep');
-                aiStep.classList.add('active');
-                aiStep.disabled = false;
-            }, 800);
+            // Clear previous results
+            document.getElementById('detectionLayer').innerHTML = '';
+            document.getElementById('buildingInfoPanel').style.display = 'none';
+            document.getElementById('componentPanel').style.display = 'none';
+            document.getElementById('geoPanel').style.display = 'none';
         }
 
-        async function runAnalysis() {
+        function runStep1() {
             if (!selectedCase) return;
+            log("Identifying building structure and scale...", 'info');
+            
+            // Update Right Panel
+            document.getElementById('buildingInfoPanel').style.display = 'block';
+            document.getElementById('valStructure').innerText = selectedCase.step1_info.structure;
+            document.getElementById('valYear').innerText = selectedCase.step1_info.year;
+            document.getElementById('valUse').innerText = selectedCase.step1_info.use;
+            
+            log("Appearance recognition complete.", 'success');
+            log("Matching drawing database...", 'info');
+            
+            setTimeout(() => {
+                log("Database match found. Proceed to semantic recognition.", 'success');
+                document.getElementById('step2Btn').disabled = false;
+                document.getElementById('step2Btn').classList.add('active');
+            }, 1000);
+        }
 
-            log("Executing AI Semantic Parsing (Fixed Reference)...", 'info');
-            const formData = new FormData();
-            formData.append('case_id', selectedCase.id);
+        async function runStep2() {
+            if (!selectedCase) return;
+            log("Applying perspective rectification...", 'info');
+            
+            // Transition to ortho image
+            mainImage.style.opacity = '0';
+            setTimeout(async () => {
+                mainImage.src = `${API_URL}/static/demo_data/${selectedCase.id}_ortho.jpg`;
+                mainImage.style.opacity = '1';
+                log("Geometric distortion corrected.", 'success');
 
-            try {
-                const response = await fetch(`${API_URL}/analyze_demo`, {
-                    method: 'POST',
-                    body: formData
-                });
+                log("Executing Semantic Parsing...", 'info');
+                const formData = new FormData();
+                formData.append('case_id', selectedCase.id);
 
-                if (!response.ok) throw new Error("Demo analysis failed");
-
-                const data = await response.json();
-                log(`Parsing successful! Found ${data.debug.boxes_count} structural components.`, 'success');
-
-                // Update UI
-                updateMetrics(data.risk_report);
-                updateElementsTable(data.debug.raw_boxes || []);
-                renderDetections(data.debug.raw_boxes || [], data.debug.image_dims);
-                
-                if (data.cad.dxf_url) {
-                    // Find or create download button
-                    let downloadBtn = document.getElementById('fixedDownloadBtn');
-                    if (!downloadBtn) {
-                        downloadBtn = document.createElement('a');
-                        downloadBtn.id = 'fixedDownloadBtn';
-                        downloadBtn.className = "btn btn-outline";
-                        downloadBtn.style.marginTop = "10px";
-                        document.querySelector('.data-panel').prepend(downloadBtn);
-                    }
-                    downloadBtn.href = `${API_URL}${data.cad.dxf_url}`;
-                    downloadBtn.download = `facade_${selectedCase.id}.dxf`;
-                    downloadBtn.innerHTML = '<i class="ri-download-line"></i> Download CAD (.DXF)';
+                try {
+                    const res = await fetch(`${API_URL}/analyze_demo`, { method: 'POST', body: formData });
+                    const data = await res.json();
                     
-                    log("CAD vector generation complete.", 'success');
+                    // Update Right Panel
+                    document.getElementById('componentPanel').style.display = 'block';
+                    document.getElementById('countWindow').innerText = data.counts.window;
+                    document.getElementById('countAC').innerText = data.counts.ac;
+                    document.getElementById('countOther').innerText = data.counts.door;
                     
-                    document.getElementById('downloadStep').classList.add('completed');
-                    document.getElementById('downloadStep').disabled = false;
+                    renderDetections(data.debug.raw_boxes, data.debug.image_dims);
+                    log(`Detected ${data.debug.boxes_count} components.`, 'success');
+                    
+                    document.getElementById('step3Btn').disabled = false;
+                    document.getElementById('step3Btn').classList.add('active');
+                } catch (e) {
+                    log("Semantic identification failed.", 'warn');
                 }
+            }, 600);
+        }
 
-            } catch (error) {
-                log(`Error: ${error.message}`, 'warn');
-            }
+        function runStep3() {
+            if (!selectedCase) return;
+            log("Analyzing facade geometry...", 'info');
+            
+            // Visual: Add vertical dashed lines to windows
+            const layer = document.getElementById('detectionLayer');
+            const windows = Array.from(layer.querySelectorAll('div')).filter(el => el.innerText.includes('window'));
+            
+            // Find columns (group by X within tolerance)
+            const cols = {};
+            windows.forEach(win => {
+                const x = parseInt(win.style.left);
+                const matchedX = Object.keys(cols).find(cx => Math.abs(parseInt(cx) - x) < 30);
+                if (matchedX) cols[matchedX].push(win);
+                else cols[x] = [win];
+            });
+
+            Object.values(cols).forEach(col => {
+                if (col.length < 2) return;
+                const sorted = col.sort((a, b) => parseInt(a.style.top) - parseInt(b.style.top));
+                const first = sorted[0];
+                const last = sorted[sorted.length-1];
+                
+                const line = document.createElement('div');
+                line.style.cssText = `
+                    position: absolute;
+                    left: ${parseInt(first.style.left) + parseInt(first.style.width)/2}px;
+                    top: ${first.style.top};
+                    width: 0;
+                    height: ${parseInt(last.style.top) - parseInt(first.style.top) + parseInt(last.style.height)}px;
+                    border-left: 2px dashed rgba(255,255,255,0.4);
+                    pointer-events: none;
+                    z-index: 5;
+                `;
+                layer.appendChild(line);
+            });
+
+            // Update Right Panel
+            document.getElementById('geoPanel').style.display = 'block';
+            document.getElementById('valBays').innerText = selectedCase.step3_info.bays;
+            document.getElementById('valSymmetry').innerText = selectedCase.step3_info.symmetry;
+            document.getElementById('valKitchen').innerText = selectedCase.step3_info.kitchen_est;
+            document.getElementById('valBedroom').innerText = selectedCase.step3_info.bedroom_est;
+
+            log("Spatial structure analyzed.", 'success');
+            document.getElementById('step4Btn').disabled = false;
+            document.getElementById('step4Btn').classList.add('active');
+        }
+
+        function runStep4() {
+            if (!selectedCase) return;
+            log("Generating interior floor plan...", 'info');
+            
+            // Replace viewpoint content with iframe
+            const viewport = document.querySelector('.viewport-content');
+            viewport.innerHTML = `
+                <iframe src="/static/floor_plan.html" style="width: 100%; height: 100%; border: none; background: white;"></iframe>
+            `;
+            
+            log("Plan generation complete. Showing interior layout.", 'success');
+            document.querySelectorAll('.step-item').forEach(btn => btn.classList.remove('active'));
+            document.getElementById('step4Btn').classList.add('completed');
+        }
+
+        function renderDetections(boxes, dims) {
+            const layer = document.getElementById('detectionLayer');
+            if (!layer) return;
+            layer.innerHTML = '';
+            
+            const rect = layer.getBoundingClientRect();
+            const scaleX = rect.width / dims[0];
+            const scaleY = rect.height / dims[1];
+
+            boxes.forEach(box => {
+                const [label, x, y, w, h] = box;
+                const div = document.createElement('div');
+                div.style.position = 'absolute';
+                div.style.left = `${x * scaleX}px`;
+                div.style.top = `${y * scaleY}px`;
+                div.style.width = `${w * scaleX}px`;
+                div.style.height = `${h * scaleY}px`;
+                div.style.border = `1px solid ${label === 'window' ? '#f472b6' : '#fbbf24'}`;
+                div.style.backgroundColor = `rgba(${label === 'window' ? '244, 114, 182' : '251, 191, 36'}, 0.15)`;
+                
+                const labelSpan = document.createElement('span');
+                labelSpan.innerText = label;
+                labelSpan.style.position = 'absolute';
+                labelSpan.style.top = '-14px';
+                labelSpan.style.left = '0';
+                labelSpan.style.fontSize = '10px';
+                labelSpan.style.color = 'white';
+                labelSpan.style.backgroundColor = label === 'window' ? '#f472b6' : '#fbbf24';
+                labelSpan.style.padding = '0 4px';
+                labelSpan.style.borderRadius = '2px';
+                
+                div.appendChild(labelSpan);
+                layer.appendChild(div);
+            });
+        }
+
+        function log(msg, type='info') {
+            const container = document.querySelector('.log-container');
+            const entry = document.createElement('div');
+            entry.className = 'log-entry';
+            const time = new Date().toLocaleTimeString('en-US', {hour12: false});
+            entry.innerHTML = `<span class="log-time">[${time}]</span> <span class="log-msg ${type}">${msg}</span>`;
+            container.appendChild(entry);
+            container.scrollTop = container.scrollHeight;
         }
 
         function updateMetrics(report) {

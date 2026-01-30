@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>建筑平面图 - SVG 轮廓线</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+            background-color: #f5f5f5;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            width: 100%;
+            margin: 0 auto;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+            padding: 20px;
+        }
+
+        h1 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 20px;
+            font-size: 24px;
+        }
+
+        .floor-plan-canvas {
+            position: relative;
+            width: 100%;
+            max-width: 1200px;
+            height: 1355px;  /* 保持与 Figma 大致相同的宽高比 (1122.5:1266.5 ≈ 1:1.13) */
+            margin: 0 auto;
+            background-color: #fafafa;
+            border: 2px solid #ddd;
+            border-radius: 4px;
+            overflow: hidden;
+        }
+
+        /* SVG 房间图层样式 */
+        .room-svg {
+            position: absolute;
+            display: block;
+        }
+
+        /* 根据 Figma 元数据的坐标定位各个房间 */
+        /* 画布边界: X[-3158.5 ~ -2036, 宽1122.5], Y[-752 ~ 514.5, 高1266.5] */
+
+        .livingroom {
+            left: 0%;
+            top: 14.8%;
+            width: 67.3%;
+            height: 72.3%;
+        }
+
+        .balcony {
+            left: 4.5%;
+            top: 87.5%;
+            width: 27.8%;
+            height: 11.3%;
+        }
+
+        .kitchen {
+            left: 15.4%;
+            top: 0%;
+            width: 22.1%;
+            height: 25.1%;
+        }
+
+        .bathroom {
+            left: 37.9%;
+            top: 21.5%;
+            width: 17.2%;
+            height: 28.6%;
+        }
+
+        .bedroom1 {
+            left: 67.3%;
+            top: 50.2%;
+            width: 32.5%;
+            height: 36.3%;
+        }
+
+        .bedroom2 {
+            left: 55.4%;
+            top: 21.6%;
+            width: 31.4%;
+            height: 27.7%;
+        }
+
+        .bedroom3 {
+            left: 37.8%;
+            top: 60.3%;
+            width: 29.8%;
+            height: 26.7%;
+        }
+
+        /* 房间信息面板 */
+        .info-panel {
+            margin-top: 20px;
+            padding: 15px;
+            background: #f9f9f9;
+            border-radius: 4px;
+            border: 1px solid #e0e0e0;
+        }
+
+        .info-panel h2 {
+            font-size: 18px;
+            color: #333;
+            margin-bottom: 10px;
+        }
+
+        .info-tip {
+            padding: 10px;
+            background: #fff3cd;
+            border: 1px solid #ffc107;
+            border-radius: 4px;
+            color: #856404;
+            font-size: 14px;
+            margin-bottom: 15px;
+        }
+
+        .room-list {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 10px;
+        }
+
+        .room-item {
+            padding: 10px;
+            background: white;
+            border-radius: 4px;
+            border: 1px solid #ddd;
+            font-size: 14px;
+            color: #666;
+        }
+
+        .room-item strong {
+            color: #333;
+            display: block;
+            margin-bottom: 5px;
+        }
+
+        /* 响应式设计 */
+        @media (max-width: 768px) {
+            .container {
+                padding: 15px;
+            }
+
+            h1 {
+                font-size: 20px;
+            }
+
+            .floor-plan-canvas {
+                height: 600px;
+            }
+
+            .room-list {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🏠 建筑平面图 - SVG 轮廓线</h1>
+
+        <div class="floor-plan-canvas">
+            <!-- 客厅 SVG -->
+            <img class="room-svg livingroom"
+                 src="./data/Untitled/livingroom.svg"
+                 alt="Living Room"
+                 data-name="livingroom"
+                 data-node-id="24:59">
+
+            <!-- 阳台 SVG -->
+            <img class="room-svg balcony"
+                 src="./data/Untitled/balcony.svg"
+                 alt="Balcony"
+                 data-name="balcony"
+                 data-node-id="24:58">
+
+            <!-- 厨房 SVG -->
+            <img class="room-svg kitchen"
+                 src="./data/Untitled/kitchen.svg"
+                 alt="Kitchen"
+                 data-name="kitchen"
+                 data-node-id="24:60">
+
+            <!-- 卫生间 SVG -->
+            <img class="room-svg bathroom"
+                 src="./data/Untitled/bathroom.svg"
+                 alt="Bathroom"
+                 data-name="bathroom"
+                 data-node-id="24:61">
+
+            <!-- 卧室1 SVG -->
+            <img class="room-svg bedroom1"
+                 src="./data/Untitled/bedroom1.svg"
+                 alt="Bedroom 1"
+                 data-name="bedroom1"
+                 data-node-id="24:62">
+
+            <!-- 卧室2 SVG -->
+            <img class="room-svg bedroom2"
+                 src="./data/Untitled/bedroom2.svg"
+                 alt="Bedroom 2"
+                 data-name="bedroom2"
+                 data-node-id="24:63">
+
+            <!-- 卧室3 SVG -->
+            <img class="room-svg bedroom3"
+                 src="./data/Untitled/bedroom3.svg"
+                 alt="Bedroom 3"
+                 data-name="bedroom3"
+                 data-node-id="24:64">
+        </div>
+
+        <!-- 房间信息面板 -->
+        <div class="info-panel">
+            <div class="info-tip">
+                💡 提示：现在只显示 SVG 轮廓线图层，背景图片已删除。如果房间位置不准确，可能需要在 Figma 中调整各图层的位置。
+            </div>
+
+            <h2>📋 房间信息</h2>
+            <div class="room-list">
+                <div class="room-item">
+                    <strong>🛋️ 客厅 Livingroom</strong>
+                    <span>面积：15.7m² + 19.9m²</span>
+                </div>
+                <div class="room-item">
+                    <strong>🏖️ 阳台 Balcony</strong>
+                    <span>面积：4.0m²</span>
+                </div>
+                <div class="room-item">
+                    <strong>🍳 厨房 Kitchen</strong>
+                    <span>面积：8.2m²</span>
+                </div>
+                <div class="room-item">
+                    <strong>🚿 卫生间 Bathroom</strong>
+                    <span>面积：7.0m²</span>
+                </div>
+                <div class="room-item">
+                    <strong>🛏️ 卧室A Bedroom 1</strong>
+                    <span>面积：12.6m²</span>
+                </div>
+                <div class="room-item">
+                    <strong>🛏️ 卧室B Bedroom 2</strong>
+                    <span>面积：17.2m²</span>
+                </div>
+                <div class="room-item">
+                    <strong>🛏️ 卧室C Bedroom 3</strong>
+                    <span>面积：11.3m²</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
