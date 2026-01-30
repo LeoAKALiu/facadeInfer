@@ -1,4 +1,7 @@
-import cv2
+try:
+    import cv2
+except ImportError:
+    cv2 = None
 import os
 import logging
 import numpy as np
@@ -13,7 +16,6 @@ class ImageProcessor:
         os.makedirs(self.static_dir, exist_ok=True)
         self.logger = logging.getLogger(__name__)
 
-        # Lazy load model components only when needed
         self.feature_extractor = None
         self.model = None
         self.device = None
@@ -22,7 +24,6 @@ class ImageProcessor:
     def _init_model(self):
         if self.model is not None:
             return
-
         try:
             import torch
             from transformers import (
@@ -33,8 +34,6 @@ class ImageProcessor:
             self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
             self.model_name = "Xpitfire/segformer-finetuned-segments-cmp-facade"
             self.token = os.getenv("HF_TOKEN")
-
-            self.logger.info(f"Loading model {self.model_name} on {self.device}...")
             self.feature_extractor = SegformerImageProcessor.from_pretrained(
                 self.model_name, token=self.token
             )
@@ -44,12 +43,13 @@ class ImageProcessor:
             self.model.to(self.device)
             self.model.eval()
         except ImportError:
-            self.logger.warning(
-                "Heavy AI dependencies not found. AI processing will be disabled."
-            )
-            raise
+            self.logger.warning("Heavy AI dependencies not found.")
 
     def process(self, image_path: str, corners: list = None):
+        if cv2 is None or os.environ.get("VERCEL"):
+            # Return demo data if on Vercel or no OpenCV
+            return "static/demo_rectified.jpg", [], (1024, 800)
+
         if not os.path.exists(image_path):
             raise FileNotFoundError(f"Image not found: {image_path}")
 
@@ -57,7 +57,6 @@ class ImageProcessor:
         pil_img = ImageOps.exif_transpose(pil_img)
         img_np = np.array(pil_img)
 
-        # 1. Perspective Rectification if corners provided
         if corners and len(corners) >= 3:
             src_pts = np.array(corners, dtype="float32")
             s = src_pts.sum(axis=1)
@@ -93,8 +92,6 @@ class ImageProcessor:
 
             if len(corners) > 4:
                 mask = np.zeros((target_height, width), dtype=np.uint8)
-                import torch  # Ensure torch is available for transformation if needed
-
                 warped_poly = cv2.perspectiveTransform(src_pts.reshape(-1, 1, 2), M)
                 cv2.fillPoly(mask, [warped_poly.astype(np.int32)], 255)
                 warped = cv2.bitwise_and(warped, warped, mask=mask)
@@ -115,8 +112,6 @@ class ImageProcessor:
         processed_path = os.path.join(self.static_dir, processed_filename)
         cv2.imwrite(processed_path, img_cv2)
 
-        # 2. AI Segmentation (Only if NOT in demo mode - handled in main.py)
-        # We'll skip actual inference here if we want to save space/time on Vercel
         boxes = []
         return processed_path, boxes, (target_width, target_height)
 
