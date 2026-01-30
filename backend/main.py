@@ -30,7 +30,14 @@ app.add_middleware(
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 # Initialize Processors
-image_processor = ImageProcessor(upload_dir="uploads", static_dir="static")
+# Use /tmp for uploads on Vercel
+UPLOAD_DIR = "/tmp" if os.environ.get("VERCEL") else "uploads"
+STATIC_DIR = "static"
+
+if not os.path.exists(UPLOAD_DIR):
+    os.makedirs(UPLOAD_DIR, exist_ok=True)
+
+image_processor = ImageProcessor(upload_dir=UPLOAD_DIR, static_dir=STATIC_DIR)
 semantic_analyzer = SemanticAnalyzer()
 layout_generator = LayoutGenerator()
 
