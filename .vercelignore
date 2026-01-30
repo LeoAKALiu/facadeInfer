@@ -1,14 +1,9 @@
-# Keep static demo assets
-!backend/static/demo_data/
-!backend/static/floor_plan.html
+# Ignore root level and external large data
 data/
 outputs/
 backend/uploads/
-*.jpg
-!backend/static/demo_rectified.jpg
-*.JPG
-*.png
-*.dxf
+.env
+.sisyphus/
 facade_rectification.py
 facade_rectification_v2.py
 demo_facade.py
@@ -18,9 +13,9 @@ verify_ai.py
 test_pipeline.py
 debug_viz.py
 get_labels.py
-.env
-.sisyphus/
-# Keep backend/static/index.html and backend/static/demo_rectified.jpg
-# But ignore other stuff in static if any
-backend/static/*.dxf
-backend/static/processed_*
+
+# Keep ONLY the essential static assets
+# Vercel by default includes everything not ignored
+# Let's ensure static files aren't accidentally filtered by extension
+# backend/static/*.dxf
+# backend/static/processed_*
