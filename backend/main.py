@@ -27,15 +27,18 @@ app.add_middleware(
 )
 
 # Static Files
-app.mount("/static", StaticFiles(directory="static"), name="static")
+static_abs_path = os.path.join(os.path.dirname(__file__), "static")
+app.mount("/static", StaticFiles(directory=static_abs_path), name="static")
 
 # Initialize Processors
 # Use /tmp for uploads on Vercel
 UPLOAD_DIR = "/tmp" if os.environ.get("VERCEL") else "uploads"
-STATIC_DIR = "static"
+STATIC_DIR = os.path.join(os.path.dirname(__file__), "static")
 
-if not os.path.exists(UPLOAD_DIR):
-    os.makedirs(UPLOAD_DIR, exist_ok=True)
+# Don't create directories at module level if on Vercel
+if not os.environ.get("VERCEL"):
+    if not os.path.exists(UPLOAD_DIR):
+        os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 image_processor = ImageProcessor(upload_dir=UPLOAD_DIR, static_dir=STATIC_DIR)
 semantic_analyzer = SemanticAnalyzer()
@@ -44,7 +47,8 @@ layout_generator = LayoutGenerator()
 
 @app.get("/")
 async def root():
-    return FileResponse("static/index.html")
+    index_path = os.path.join(os.path.dirname(__file__), "static", "index.html")
+    return FileResponse(index_path)
 
 
 @app.post("/analyze")
