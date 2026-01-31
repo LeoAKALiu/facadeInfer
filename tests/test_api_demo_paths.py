@@ -32,7 +32,11 @@ def test_root_serves_html() -> None:
     """The root path `/` should serve the dashboard HTML (not a JSON 404)."""
     client = TestClient(index.app)
 
-    resp = client.get("/")
+    resp = client.get("/", follow_redirects=False)
+    if resp.status_code in {301, 302, 307, 308}:
+        assert resp.headers["location"] == "/index.html"
+        return
+
     assert resp.status_code == 200
     assert "text/html" in resp.headers.get("content-type", "")
     assert "<!DOCTYPE html>" in resp.text

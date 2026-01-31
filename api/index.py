@@ -1,11 +1,12 @@
 import os
 import sys
 import json
+import io
 import numpy as np
 from typing import Any
-from fastapi import FastAPI, UploadFile, File, HTTPException, Form
+from fastapi import FastAPI, UploadFile, File, HTTPException, Form, Request, Response
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
 from PIL import Image
 
@@ -41,12 +42,18 @@ layout_generator = LayoutGenerator()
 
 
 @app.get("/")
-async def root() -> FileResponse:
-    """Serve the dashboard HTML page."""
+async def root() -> Response:
+    """Serve the dashboard entrypoint.
+
+    In local/dev contexts, serve `public/index.html` directly.
+    In Vercel serverless contexts, static assets may not be present on the
+    function filesystem, so we fall back to redirecting to `/index.html`,
+    which Vercel serves from `public/`.
+    """
     index_path = os.path.join(static_abs_path, "index.html")
-    if not os.path.exists(index_path):
-        raise HTTPException(status_code=404, detail="index.html not found")
-    return FileResponse(index_path)
+    if os.path.exists(index_path):
+        return FileResponse(index_path)
+    return RedirectResponse(url="/index.html")
 
 
 @app.get("/cases")
@@ -108,18 +115,35 @@ async def get_cases() -> list[dict[str, Any]]:
 
 
 @app.post("/analyze_demo")
-async def analyze_demo(case_id: str = Form(...)) -> dict[str, Any]:
+async def analyze_demo(request: Request, case_id: str = Form(...)) -> dict[str, Any]:
     """Analyze a bundled demo case and return the computed results."""
     try:
         demo_data_dir = os.path.join(static_abs_path, "demo_data")
         json_path = os.path.join(demo_data_dir, f"{case_id}_ortho.json")
         img_path = os.path.join(demo_data_dir, f"{case_id}_ortho.jpg")
 
-        if not os.path.exists(json_path):
-            raise HTTPException(status_code=404, detail="Demo data not found")
+        data: dict[str, Any]
+        if os.path.exists(json_path):
+            with open(json_path, "r") as f:
+                data = json.load(f)
+        else:
+            # In Vercel serverless deployments, the `public/` directory is served
+            # by the edge but is not necessarily readable from the function FS.
+            base_url = str(request.base_url).rstrip("/")
+            json_url = f"{base_url}{DEMO_DATA_URL_PREFIX}/{case_id}_ortho.json"
 
-        with open(json_path, "r") as f:
-            data = json.load(f)
+            try:
+                import httpx
+            except Exception as e:  # pragma: no cover
+                raise HTTPException(status_code=500, detail=f"Missing dependency: httpx ({e})")
+
+            async with httpx.AsyncClient(follow_redirects=True, timeout=10.0) as client:
+                resp = await client.get(json_url)
+
+            if resp.status_code != 200:
+                raise HTTPException(status_code=404, detail="Demo data not found")
+
+            data = resp.json()
 
         bounding_boxes = []
         counts = {"window": 0, "ac": 0, "door": 0, "other": 0}
@@ -141,8 +165,26 @@ async def analyze_demo(case_id: str = Form(...)) -> dict[str, Any]:
             else:
                 counts["other"] += 1
 
-        with Image.open(img_path) as img:
-            image_dims = img.size
+        if os.path.exists(img_path):
+            with Image.open(img_path) as img:
+                image_dims = img.size
+        else:
+            base_url = str(request.base_url).rstrip("/")
+            img_url = f"{base_url}{DEMO_DATA_URL_PREFIX}/{case_id}_ortho.jpg"
+
+            try:
+                import httpx
+            except Exception as e:  # pragma: no cover
+                raise HTTPException(status_code=500, detail=f"Missing dependency: httpx ({e})")
+
+            async with httpx.AsyncClient(follow_redirects=True, timeout=10.0) as client:
+                resp = await client.get(img_url)
+
+            if resp.status_code != 200:
+                raise HTTPException(status_code=404, detail="Demo image not found")
+
+            with Image.open(io.BytesIO(resp.content)) as img:
+                image_dims = img.size
 
         risk_report = semantic_analyzer.analyze(bounding_boxes, image_dims)
 
