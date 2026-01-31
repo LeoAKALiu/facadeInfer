@@ -47,6 +47,24 @@ def test_cases_thumbnails_use_configured_asset_base_url(monkeypatch: MonkeyPatch
             assert facade["ortho_image"].startswith("https://facade-demo.oss-cn-beijing.aliyuncs.com/demo/")
 
 
+def test_cases_use_public_asset_base_for_ortho(monkeypatch: MonkeyPatch) -> None:
+    """If originals are private, ortho/json/svg can still be served from a public base."""
+    monkeypatch.delenv("DEMO_ASSET_BASE_URL", raising=False)
+    monkeypatch.setenv("DEMO_PUBLIC_ASSET_BASE_URL", "https://facade-demo.oss-cn-beijing.aliyuncs.com/demo")
+    client = TestClient(index.app)
+
+    resp = client.get("/cases")
+    assert resp.status_code == 200
+    buildings = resp.json()
+    assert buildings and isinstance(buildings, list)
+    assert buildings[0]["floorplan_svg_base_url"] == "https://facade-demo.oss-cn-beijing.aliyuncs.com/demo/Untitled"
+
+    facade0 = buildings[0]["facades"][0]
+    # Thumbnail remains local by default, but ortho should use the public base.
+    assert facade0["thumbnail"].startswith("/demo_data/")
+    assert facade0["ortho_image"].startswith("https://facade-demo.oss-cn-beijing.aliyuncs.com/demo/")
+
+
 def test_root_serves_html() -> None:
     """The root path `/` should serve the dashboard HTML (not a JSON 404)."""
     client = TestClient(index.app)

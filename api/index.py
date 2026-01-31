@@ -51,6 +51,17 @@ def _get_demo_asset_base_url() -> str | None:
         return None
     return base_url.rstrip("/")
 
+def _get_demo_public_asset_base_url() -> str | None:
+    """Return a base URL for publicly accessible demo assets (ortho/json/svg).
+
+    Use this when originals are private but derived assets are public.
+    """
+    public_url = os.getenv("DEMO_PUBLIC_ASSET_BASE_URL", "").strip()
+    if public_url:
+        return public_url.rstrip("/")
+    # Fall back to DEMO_ASSET_BASE_URL if user made everything public.
+    return _get_demo_asset_base_url()
+
 
 def _demo_original_filename(case_id: str) -> str:
     """Return the original image filename for the given demo case."""
@@ -61,9 +72,17 @@ def _demo_original_filename(case_id: str) -> str:
 
 
 def demo_asset_url(relative_path: str) -> str:
-    """Build a URL for a demo asset (image/json) for the UI/backend to consume."""
+    """Build a URL for a demo asset (default: originals/thumbnails)."""
     normalized = relative_path.lstrip("/")
     base_url = _get_demo_asset_base_url()
+    if base_url:
+        return f"{base_url}/{normalized}"
+    return f"{DEMO_DATA_URL_PREFIX}/{normalized}"
+
+def demo_public_asset_url(relative_path: str) -> str:
+    """Build a URL for publicly accessible demo assets (ortho/json/svg)."""
+    normalized = relative_path.lstrip("/")
+    base_url = _get_demo_public_asset_base_url()
     if base_url:
         return f"{base_url}/{normalized}"
     return f"{DEMO_DATA_URL_PREFIX}/{normalized}"
@@ -81,19 +100,20 @@ def demo_thumbnail_url(case_id: str) -> str:
 
 def demo_ortho_preview_url(case_id: str) -> str:
     """Return an optimized ortho preview URL for the main viewport."""
-    base_url = _get_demo_asset_base_url()
-    url = demo_asset_url(f"{case_id}_ortho.jpg")
+    base_url = _get_demo_public_asset_base_url()
+    url = demo_public_asset_url(f"{case_id}_ortho.jpg")
     if not base_url:
         return url
     # Keep enough resolution for the viewport while reducing transfer size.
+    # If OSS image processing is disabled, OSS will just return the original.
     return f"{url}?x-oss-process=image/resize,w_1800/quality,Q_80/format,webp"
 
 def demo_floorplan_svg_base_url() -> str | None:
     """Return the base URL for the floorplan SVG layers, if configured.
 
-    The user stores room SVGs under `<DEMO_ASSET_BASE_URL>/Untitled/`.
+    The user stores room SVGs under `<DEMO_PUBLIC_ASSET_BASE_URL>/Untitled/`.
     """
-    base_url = _get_demo_asset_base_url()
+    base_url = _get_demo_public_asset_base_url()
     if not base_url:
         return None
     return f"{base_url}/Untitled"
@@ -177,7 +197,7 @@ async def analyze_demo(request: Request, case_id: str = Form(...)) -> dict[str, 
         else:
             # In Vercel serverless deployments, the `public/` directory is served
             # by the edge but is not necessarily readable from the function FS.
-            base_url = _get_demo_asset_base_url()
+            base_url = _get_demo_public_asset_base_url()
             if base_url:
                 json_url = f"{base_url}/{case_id}_ortho.json"
             else:
@@ -232,7 +252,7 @@ async def analyze_demo(request: Request, case_id: str = Form(...)) -> dict[str, 
             with Image.open(img_path) as img:
                 image_dims = img.size
         else:
-            base_url = _get_demo_asset_base_url()
+            base_url = _get_demo_public_asset_base_url()
             if base_url:
                 img_url = f"{base_url}/{case_id}_ortho.jpg"
             else:
