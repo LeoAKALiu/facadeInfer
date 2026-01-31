@@ -5,3 +5,5 @@ ezdxf
 numpy
 Pillow
 python-dotenv
+pytest
+httpx

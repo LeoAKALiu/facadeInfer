@@ -2,6 +2,7 @@ import os
 import sys
 import json
 import numpy as np
+from typing import Any
 from fastapi import FastAPI, UploadFile, File, HTTPException, Form
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
@@ -31,6 +32,7 @@ BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 # Vercel public directory is served at root, so we look for files in 'public'
 # but the browser will see them at the root level (e.g. /index.html)
 static_abs_path = os.path.join(BASE_DIR, "public")
+DEMO_DATA_URL_PREFIX = "/demo_data"
 
 # Initialize Processors
 image_processor = ImageProcessor(upload_dir="/tmp", static_dir=static_abs_path)
@@ -39,7 +41,8 @@ layout_generator = LayoutGenerator()
 
 
 @app.get("/cases")
-async def get_cases():
+async def get_cases() -> list[dict[str, Any]]:
+    """Return the curated demo cases shown in the UI."""
     return [
         {
             "id": "IMG_1397",
@@ -96,7 +99,8 @@ async def get_cases():
 
 
 @app.post("/analyze_demo")
-async def analyze_demo(case_id: str = Form(...)):
+async def analyze_demo(case_id: str = Form(...)) -> dict[str, Any]:
+    """Analyze a bundled demo case and return the computed results."""
     try:
         demo_data_dir = os.path.join(static_abs_path, "demo_data")
         json_path = os.path.join(demo_data_dir, f"{case_id}_ortho.json")
@@ -138,8 +142,9 @@ async def analyze_demo(case_id: str = Form(...)):
             "risk_report": risk_report,
             "counts": counts,
             "images": {
-                "original": f"/static/demo_data/{case_id}.JPG",
-                "processed": f"/static/demo_data/{case_id}_ortho.jpg",
+                # The `public/` directory is served at `/` in production.
+                "original": f"{DEMO_DATA_URL_PREFIX}/{case_id}.JPG",
+                "processed": f"{DEMO_DATA_URL_PREFIX}/{case_id}_ortho.jpg",
             },
             "debug": {
                 "boxes_count": len(bounding_boxes),
@@ -147,5 +152,7 @@ async def analyze_demo(case_id: str = Form(...)):
                 "raw_boxes": bounding_boxes,
             },
         }
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
