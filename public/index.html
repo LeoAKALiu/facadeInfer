@@ -609,6 +609,23 @@
             const viewport = document.getElementById('viewportMain');
             if (!viewport) return;
 
+            const inferFloorplanSvgBaseUrl = () => {
+                if (selectedCase && selectedCase.floorplan_svg_base_url) {
+                    return String(selectedCase.floorplan_svg_base_url).replace(/\/+$/, '');
+                }
+                // Backward-compatible inference from the selected facade asset URL.
+                const candidate = (selectedCase && (selectedCase.original_image || selectedCase.thumbnail || '')) || '';
+                try {
+                    const u = new URL(candidate, location.origin);
+                    const marker = '/demo/';
+                    const idx = u.pathname.indexOf(marker);
+                    if (idx !== -1) {
+                        return `${u.origin}${u.pathname.slice(0, idx + marker.length)}Untitled`;
+                    }
+                } catch (e) {}
+                return '';
+            };
+
             // Load the authored HTML/CSS layout and render the 7 room layers directly in the viewport.
             const res = await fetch('/floor_plan.html', { cache: 'no-cache' });
             if (!res.ok) {
@@ -631,16 +648,21 @@
                 return;
             }
 
-            // Wrapper styles adapted to our viewport (responsive, no iframe).
-            viewport.innerHTML = `
+            // Render inside Shadow DOM to prevent the embedded floor_plan CSS (e.g. body/*)
+            // from affecting the rest of the dashboard.
+            viewport.innerHTML = `<div id="floor-plan-host" style="position:absolute; inset:0;"></div>`;
+            const host = viewport.querySelector('#floor-plan-host');
+            if (!host) return;
+            const shadow = host.shadowRoot || host.attachShadow({ mode: 'open' });
+            shadow.innerHTML = `
               <style id="floorPlanInjectedCss"></style>
               <div class="floor-plan-stage" style="position:absolute; inset:0; display:flex; align-items:center; justify-content:center; background:#111;">
                 <div class="floor-plan-canvas"></div>
               </div>
             `;
 
-            const injectedCss = viewport.querySelector('#floorPlanInjectedCss');
-            const canvasHost = viewport.querySelector('.floor-plan-stage .floor-plan-canvas');
+            const injectedCss = shadow.querySelector('#floorPlanInjectedCss');
+            const canvasHost = shadow.querySelector('.floor-plan-stage .floor-plan-canvas');
             if (!injectedCss || !canvasHost) return;
 
             // Bring in the original CSS, but override body/container styles and make canvas responsive.
@@ -664,7 +686,10 @@
 
             // Resolve relative URLs against /floor_plan.html.
             const baseUrl = new URL('/floor_plan.html', location.origin);
-            const ossFloorplanBase = (selectedCase && selectedCase.floorplan_svg_base_url) ? String(selectedCase.floorplan_svg_base_url).replace(/\/+$/, '') : '';
+            const ossFloorplanBase = inferFloorplanSvgBaseUrl();
+            if (ossFloorplanBase) {
+                log(`Using OSS floorplan layers: ${ossFloorplanBase}/`, 'info');
+            }
 
             for (const img of roomImgs) {
                 const classList = Array.from(img.classList);
@@ -681,9 +706,11 @@
 
                 // Try to inline the SVG content; if missing, fall back to a placeholder.
                 try {
-                    let svgRes = await fetch(abs, { cache: 'no-cache' });
+                    // Prefer OSS when available to avoid local 404 spam.
+                    let svgRes = ossAbs ? await fetch(ossAbs, { cache: 'no-cache' }) : await fetch(abs, { cache: 'no-cache' });
                     if (!svgRes.ok && ossAbs) {
-                        svgRes = await fetch(ossAbs, { cache: 'no-cache' });
+                        // Fall back to local path (dev) if OSS is missing/misconfigured.
+                        svgRes = await fetch(abs, { cache: 'no-cache' });
                     }
                     if (svgRes.ok) {
                         const svgText = await svgRes.text();
