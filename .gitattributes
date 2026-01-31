@@ -1,2 +1,9 @@
 *.jpg filter=lfs diff=lfs merge=lfs -text
 *.JPG filter=lfs diff=lfs merge=lfs -text
+
+# Vercel serves `public/` as static files. If these assets are tracked by LFS,
+# Vercel will deploy only the small pointer files, causing broken images.
+public/*.jpg -filter -diff -merge -text
+public/*.JPG -filter -diff -merge -text
+public/*/*.jpg -filter -diff -merge -text
+public/*/*.JPG -filter -diff -merge -text
