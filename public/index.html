@@ -60,7 +60,8 @@
         .btn-primary { background: var(--text-primary); color: var(--bg-background); }
         .btn:disabled { opacity: 0.3; cursor: not-allowed; }
 
-        .main-container { display: flex; flex: 1; height: calc(100vh - 64px); min-height: 0; }
+        :root { --terminal-height: 190px; }
+        .main-container { display: flex; flex: 1; height: calc(100vh - 64px); min-height: 0; position: relative; padding-bottom: var(--terminal-height); }
 
         .sidebar {
             width: 320px; border-right: 1px solid var(--border-color);
@@ -125,6 +126,86 @@
         .prop-label { font-size: 10px; color: var(--text-muted); margin-bottom: 2px; }
         .prop-val { font-size: 13px; font-weight: 500; }
         .property-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+
+        /* Building selector layout */
+        .building-modal {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 32px;
+            width: min(1100px, calc(100vw - 48px));
+        }
+        #caseList { display: grid; grid-template-columns: 1fr; gap: 16px; margin-bottom: 24px; }
+        .case-card { cursor: default; }
+
+        /* Sidebar connector (Step 1 -> Step 2) */
+        .sidebar { position: relative; }
+        #stepConnector12 {
+            position: absolute;
+            left: 36px; /* aligned with indicator center */
+            width: 2px;
+            background: rgba(255,255,255,0.18);
+            border-radius: 2px;
+            pointer-events: none;
+        }
+        #stepDot12 {
+            position: absolute;
+            left: 30px;
+            width: 14px;
+            height: 14px;
+            border-radius: 999px;
+            background: rgba(16,185,129,1);
+            box-shadow: 0 0 18px rgba(16,185,129,0.85), 0 0 4px rgba(16,185,129,1);
+            opacity: 0;
+            transform: translateY(0);
+            pointer-events: none;
+        }
+
+        /* VS Code-like terminal panel */
+        #terminal-panel {
+            position: absolute;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            height: var(--terminal-height);
+            background: rgba(0,0,0,0.72);
+            border-top: 1px solid rgba(255,255,255,0.12);
+            backdrop-filter: blur(10px);
+            display: flex;
+            flex-direction: column;
+            z-index: 50;
+        }
+        #terminal-header {
+            height: 34px;
+            padding: 0 12px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            font-size: 12px;
+            color: rgba(255,255,255,0.75);
+            border-bottom: 1px solid rgba(255,255,255,0.08);
+            user-select: none;
+        }
+        #terminal-title {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            font-weight: 600;
+            letter-spacing: 0.2px;
+        }
+        #terminal-output {
+            flex: 1;
+            overflow-y: auto;
+            padding: 10px 12px;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+            font-size: 12px;
+            line-height: 1.4;
+            color: rgba(34,197,94,0.95);
+            white-space: pre-wrap;
+        }
+        .terminal-dim { color: rgba(34,197,94,0.65); }
+        .terminal-warn { color: rgba(251,191,36,0.95); }
+        .terminal-error { color: rgba(248,113,113,0.95); }
     </style>
 </head>
 <body>
@@ -134,8 +215,10 @@
             <div class="header-title">StructAI Reverse Engine</div>
         </div>
         <div class="header-right">
-            <div id="aiStatus" style="font-size: 12px; color: var(--accent-success); margin-right: 12px;">
-                ● System Ready: Demo Mode
+            <div id="metricsBar" style="display:flex; gap:10px; align-items:center; margin-right: 12px; font-size: 12px;">
+                <span id="metricGpu" style="color: var(--accent-success);">GPU 28%</span>
+                <span id="metricVram" style="color: var(--text-secondary);">VRAM 6.2GB</span>
+                <span id="metricTemp" style="color: var(--text-secondary);">TEMP 62°C</span>
             </div>
             <button class="btn btn-primary" onclick="showCaseSelector()">
                 <i class="ri-folder-open-line"></i> Select Building
@@ -228,10 +311,21 @@
         </div>
     </div>
 
+    <div id="terminal-panel">
+        <div id="terminal-header">
+            <div id="terminal-title">
+                <span style="color: rgba(34,197,94,0.95);">TERMINAL</span>
+                <span class="terminal-dim">structai-demo</span>
+            </div>
+            <div class="terminal-dim">UTF-8 • LF</div>
+        </div>
+        <div id="terminal-output"></div>
+    </div>
+
     <div id="caseSelectorModal">
-        <div style="background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 12px; padding: 32px; width: 600px;">
+        <div class="building-modal">
             <h2 style="margin-bottom: 24px;">Select Building</h2>
-            <div id="caseList" style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 24px;"></div>
+            <div id="caseList"></div>
             <div style="display: flex; justify-content: flex-end;">
                 <button class="btn btn-outline" onclick="document.getElementById('caseSelectorModal').style.display='none'">Cancel</button>
             </div>
@@ -243,6 +337,118 @@
         const detectionLayer = document.getElementById('detectionLayer');
         const API_URL = location.origin;
         let selectedCase = null;
+
+        const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+
+        async function streamTechLogs(stepName, lines) {
+            // Clear terminal output for each step run to keep it readable.
+            const term = document.getElementById('terminal-output');
+            if (term) term.innerHTML = '';
+
+            const baseLines = lines && lines.length ? lines : [
+                `[${stepName}] initializing pipeline...`,
+                `[${stepName}] loading model weights (fp16)`,
+                `[${stepName}] warming up kernels`,
+                `[${stepName}] allocating GPU tensors`,
+                `[${stepName}] running inference batch=1`,
+                `[${stepName}] post-processing detections`,
+            ];
+
+            const n = Math.floor(5 + Math.random() * 6); // 5-10
+            for (let i = 0; i < n; i++) {
+                const msg = baseLines[i % baseLines.length];
+                log(msg, 'info');
+                await sleep(90 + Math.random() * 70); // fast scroll
+            }
+            log('DONE', 'success');
+            await sleep(120);
+        }
+
+        function fadeInMainImage(src, objectFit = 'contain') {
+            mainImage.style.display = 'block';
+            mainImage.style.transition = 'opacity 240ms ease';
+            mainImage.style.opacity = '0';
+            mainImage.src = src;
+            mainImage.style.objectFit = objectFit;
+            // allow layout to apply opacity=0 before fading in
+            requestAnimationFrame(() => {
+                requestAnimationFrame(() => {
+                    mainImage.style.opacity = '1';
+                });
+            });
+        }
+
+        function initMetricsTicker() {
+            const gpuEl = document.getElementById('metricGpu');
+            const vramEl = document.getElementById('metricVram');
+            const tempEl = document.getElementById('metricTemp');
+            if (!gpuEl || !vramEl || !tempEl) return;
+
+            let gpu = 28;
+            let vram = 6.2;
+            let temp = 62;
+
+            const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+            setInterval(() => {
+                gpu = clamp(gpu + (Math.random() * 6 - 3), 20, 40);
+                vram = clamp(vram + (Math.random() * 0.2 - 0.1), 5.6, 7.8);
+                temp = clamp(temp + (Math.random() * 2 - 1), 56, 72);
+                gpuEl.textContent = `GPU ${gpu.toFixed(0)}%`;
+                vramEl.textContent = `VRAM ${vram.toFixed(1)}GB`;
+                tempEl.textContent = `TEMP ${temp.toFixed(0)}°C`;
+            }, 1000);
+        }
+
+        function layoutStepConnector12() {
+            const sidebar = document.querySelector('.sidebar');
+            const step1 = document.getElementById('step1Btn');
+            const step2 = document.getElementById('step2Btn');
+            const line = document.getElementById('stepConnector12');
+            const dot = document.getElementById('stepDot12');
+            if (!sidebar || !step1 || !step2 || !line || !dot) return;
+
+            const sRect = sidebar.getBoundingClientRect();
+            const i1 = step1.querySelector('.step-indicator')?.getBoundingClientRect();
+            const i2 = step2.querySelector('.step-indicator')?.getBoundingClientRect();
+            if (!i1 || !i2) return;
+
+            const xCenter = (i1.left + i1.right) / 2 - sRect.left;
+            const y1 = (i1.top + i1.bottom) / 2 - sRect.top;
+            const y2 = (i2.top + i2.bottom) / 2 - sRect.top;
+
+            line.style.left = `${xCenter}px`;
+            line.style.top = `${y1}px`;
+            line.style.height = `${Math.max(0, y2 - y1)}px`;
+
+            dot.style.left = `${xCenter - 7}px`;
+            dot.style.top = `${y1 - 7}px`;
+        }
+
+        async function animateStep1ToStep2() {
+            const sidebar = document.querySelector('.sidebar');
+            const step1 = document.getElementById('step1Btn');
+            const step2 = document.getElementById('step2Btn');
+            const dot = document.getElementById('stepDot12');
+            if (!sidebar || !step1 || !step2 || !dot) return;
+
+            layoutStepConnector12();
+            const sRect = sidebar.getBoundingClientRect();
+            const i1 = step1.querySelector('.step-indicator')?.getBoundingClientRect();
+            const i2 = step2.querySelector('.step-indicator')?.getBoundingClientRect();
+            if (!i1 || !i2) return;
+
+            const y1 = (i1.top + i1.bottom) / 2 - sRect.top;
+            const y2 = (i2.top + i2.bottom) / 2 - sRect.top;
+
+            dot.style.opacity = '1';
+            dot.style.transition = 'transform 600ms cubic-bezier(.2,.8,.2,1), opacity 250ms ease';
+            dot.style.transform = `translateY(${Math.max(0, y2 - y1)}px)`;
+
+            await new Promise(r => setTimeout(r, 650));
+            dot.style.opacity = '0';
+            dot.style.transform = 'translateY(0)';
+            await new Promise(r => setTimeout(r, 250));
+        }
 
         async function showCaseSelector() {
             const modal = document.getElementById('caseSelectorModal');
@@ -260,18 +466,18 @@
                           <button type="button" class="facade-thumb" data-facade-id="${f.id}"
                             style="background:none;border:none;padding:0;cursor:pointer;text-align:left;">
                             <img src="${f.thumbnail}" loading="lazy" decoding="async"
-                              style="width:100%; height:120px; object-fit:cover; border:1px solid var(--border-color); border-radius:6px;">
+                              style="width:100%; height:160px; object-fit:cover; border:1px solid var(--border-color); border-radius:8px;">
                             <div style="padding-top:8px; font-size:12px; color: var(--text-secondary); text-align:center;">${f.label || f.id}</div>
                           </button>
                         `;
                     }).join('');
 
                     div.innerHTML = `
-                      <div style="padding: 12px;">
-                        <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap: 12px;">
+                      <div style="padding: 16px;">
+                        <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap: 16px;">
                           ${facadeThumbs}
                         </div>
-                        <div style="padding-top: 12px; font-size: 13px; text-align:center; font-weight: 600;">${b.name}</div>
+                        <div style="padding-top: 14px; font-size: 14px; text-align:center; font-weight: 700;">${b.name}</div>
                       </div>
                     `;
 
@@ -283,9 +489,7 @@
                             if (!facade) return;
                             selectedCase = { ...facade, name: b.name, step1_info: b.step1_info, step3_info: b.step3_info };
                             modal.style.display = 'none';
-                            mainImage.src = selectedCase.original_image || selectedCase.thumbnail;
-                            mainImage.style.display = 'block';
-                            mainImage.style.objectFit = 'contain';
+                            fadeInMainImage(selectedCase.original_image || selectedCase.thumbnail, 'contain');
                             log(`Selected building: ${b.name} (${selectedCase.label || selectedCase.id})`, 'info');
                             document.getElementById('step1Btn').disabled = false;
                             document.getElementById('step1Btn').classList.add('active');
@@ -299,48 +503,67 @@
         }
 
         function runStep1() {
-            log("Identifying building structure and scale...", 'info');
-            document.getElementById('panel1').style.display = 'block';
-            document.getElementById('valStructure').innerText = selectedCase.step1_info.structure;
-            document.getElementById('valYear').innerText = selectedCase.step1_info.year;
-            document.getElementById('valUse').innerText = selectedCase.step1_info.use;
-            log("Appearance recognition complete.", 'success');
-            log("Matching drawing database...", 'info');
-            setTimeout(() => {
-                log("Database match found. Proceed to semantic recognition.", 'success');
+            (async () => {
+                await streamTechLogs('STEP1', [
+                    '[STEP1] ingesting facade image',
+                    '[STEP1] estimating global scale',
+                    '[STEP1] extracting structural priors',
+                    '[STEP1] retrieving similar templates',
+                    '[STEP1] composing step1 report',
+                ]);
+
+                document.getElementById('panel1').style.display = 'block';
+                document.getElementById('valStructure').innerText = selectedCase.step1_info.structure;
+                document.getElementById('valYear').innerText = selectedCase.step1_info.year;
+                document.getElementById('valUse').innerText = selectedCase.step1_info.use;
+                log("Appearance recognition complete.", 'success');
+
+                document.getElementById('step1Btn').classList.add('completed');
+                await animateStep1ToStep2();
                 document.getElementById('step2Btn').disabled = false;
                 document.getElementById('step2Btn').classList.add('active');
-            }, 1000);
+            })();
         }
 
         async function runStep2() {
-            log("Applying perspective rectification...", 'info');
-            mainImage.style.opacity = '0';
-            setTimeout(async () => {
-                mainImage.src = selectedCase.ortho_image || `${API_URL}/demo_data/${selectedCase.id}_ortho.jpg`;
-                mainImage.style.objectFit = 'fill';
-                mainImage.style.opacity = '1';
-                log("Geometric distortion corrected.", 'success');
-                log("Executing Semantic Parsing...", 'info');
-                const formData = new FormData();
-                formData.append('case_id', selectedCase.id);
-                try {
-                    const res = await fetch(`${API_URL}/analyze_demo`, { method: 'POST', body: formData });
-                    const data = await res.json();
-                    document.getElementById('panel2').style.display = 'block';
-                    document.getElementById('countWindow').innerText = data.counts.window;
-                    document.getElementById('countAC').innerText = data.counts.ac;
-                    document.getElementById('countOther').innerText = data.counts.door;
-                    renderDetections(data.debug.raw_boxes, data.debug.image_dims);
-                    log(`Detected ${data.debug.boxes_count} components.`, 'success');
-                    document.getElementById('step3Btn').disabled = false;
-                    document.getElementById('step3Btn').classList.add('active');
-                } catch (e) { log("Analysis failed", "warn"); }
-            }, 600);
+            await streamTechLogs('STEP2', [
+                '[STEP2] estimating vanishing points',
+                '[STEP2] solving homography (DLT + RANSAC)',
+                '[STEP2] warping image to ortho plane',
+                '[STEP2] running semantic parser',
+                '[STEP2] building bounding boxes',
+                '[STEP2] exporting debug overlays',
+            ]);
+
+            fadeInMainImage(selectedCase.ortho_image || `${API_URL}/demo_data/${selectedCase.id}_ortho.jpg`, 'fill');
+            log("Geometric distortion corrected.", 'success');
+
+            const formData = new FormData();
+            formData.append('case_id', selectedCase.id);
+            try {
+                const res = await fetch(`${API_URL}/analyze_demo`, { method: 'POST', body: formData });
+                const data = await res.json();
+                document.getElementById('panel2').style.display = 'block';
+                document.getElementById('countWindow').innerText = data.counts.window;
+                document.getElementById('countAC').innerText = data.counts.ac;
+                document.getElementById('countOther').innerText = data.counts.door;
+                renderDetections(data.debug.raw_boxes, data.debug.image_dims);
+                log(`Detected ${data.debug.boxes_count} components.`, 'success');
+                document.getElementById('step3Btn').disabled = false;
+                document.getElementById('step3Btn').classList.add('active');
+            } catch (e) { log("Analysis failed", "warn"); }
         }
 
         function runStep3() {
-            log("Analyzing facade geometry...", 'info');
+            (async () => {
+                await streamTechLogs('STEP3', [
+                    '[STEP3] clustering window columns',
+                    '[STEP3] estimating bay spacing',
+                    '[STEP3] fitting symmetry axis',
+                    '[STEP3] inferring room adjacency graph',
+                    '[STEP3] generating layout hypotheses',
+                ]);
+                log("Analyzing facade geometry...", 'info');
             const windows = Array.from(detectionLayer.querySelectorAll('div')).filter(el => el.innerText.includes('window'));
             const cols = {};
             windows.forEach(win => {
@@ -364,12 +587,129 @@
             log("Spatial structure analyzed.", 'success');
             document.getElementById('step4Btn').disabled = false;
             document.getElementById('step4Btn').classList.add('active');
+            })();
         }
 
         function runStep4() {
-            log("Generating interior floor plan...", 'info');
-            document.getElementById('viewportMain').innerHTML = `<iframe src="/floor_plan.html" style="width:100%; height:100%; border:none; background:white;"></iframe>`;
-            log("Plan generation complete.", 'success');
+            (async () => {
+                await streamTechLogs('STEP4', [
+                    '[STEP4] sampling room priors',
+                    '[STEP4] optimizing plan constraints',
+                    '[STEP4] generating vector walls',
+                    '[STEP4] placing doors/windows',
+                    '[STEP4] exporting CAD-friendly SVG',
+                ]);
+                log("Generating interior floor plan...", 'info');
+                await renderFloorPlanLayersFromHtml();
+                log("Plan generation complete.", 'success');
+            })();
+        }
+
+        async function renderFloorPlanLayersFromHtml() {
+            const viewport = document.getElementById('viewportMain');
+            if (!viewport) return;
+
+            // Load the authored HTML/CSS layout and render the 7 room layers directly in the viewport.
+            const res = await fetch('/floor_plan.html', { cache: 'no-cache' });
+            if (!res.ok) {
+                log(`Failed to load floor_plan.html (${res.status})`, 'warn');
+                return;
+            }
+
+            const html = await res.text();
+            const doc = new DOMParser().parseFromString(html, 'text/html');
+            const styleTag = doc.querySelector('style');
+            const canvas = doc.querySelector('.floor-plan-canvas');
+            if (!styleTag || !canvas) {
+                log('floor_plan.html missing <style> or .floor-plan-canvas', 'warn');
+                return;
+            }
+
+            const roomImgs = Array.from(canvas.querySelectorAll('img.room-svg'));
+            if (roomImgs.length === 0) {
+                log('No room layers found in floor_plan.html', 'warn');
+                return;
+            }
+
+            // Wrapper styles adapted to our viewport (responsive, no iframe).
+            viewport.innerHTML = `
+              <style id="floorPlanInjectedCss"></style>
+              <div class="floor-plan-stage" style="position:absolute; inset:0; display:flex; align-items:center; justify-content:center; background:#111;">
+                <div class="floor-plan-canvas"></div>
+              </div>
+            `;
+
+            const injectedCss = viewport.querySelector('#floorPlanInjectedCss');
+            const canvasHost = viewport.querySelector('.floor-plan-stage .floor-plan-canvas');
+            if (!injectedCss || !canvasHost) return;
+
+            // Bring in the original CSS, but override body/container styles and make canvas responsive.
+            injectedCss.textContent = `
+              ${styleTag.textContent}
+              .container, body, h1, .info-panel { display:none !important; }
+              .floor-plan-canvas {
+                width: min(92%, 980px) !important;
+                height: min(92%, 720px) !important;
+                aspect-ratio: 1122.5 / 1266.5;
+                background: #fafafa !important;
+                border: 2px solid rgba(255,255,255,0.10) !important;
+                box-shadow: 0 6px 30px rgba(0,0,0,0.35);
+              }
+              .room-svg { image-rendering: auto; }
+            `;
+
+            // Copy the canvas HTML, but render each room as an inline layer element.
+            canvasHost.className = 'floor-plan-canvas';
+            canvasHost.innerHTML = '';
+
+            // Resolve relative URLs against /floor_plan.html.
+            const baseUrl = new URL('/floor_plan.html', location.origin);
+
+            for (const img of roomImgs) {
+                const classList = Array.from(img.classList);
+                const roomClass = classList.find(c => c !== 'room-svg') || '';
+                const src = img.getAttribute('src') || '';
+                const alt = img.getAttribute('alt') || roomClass || 'room';
+                const abs = new URL(src, baseUrl).toString();
+
+                // Container for this layer (positioned by the original CSS).
+                const layer = document.createElement('div');
+                layer.className = `room-svg ${roomClass}`;
+
+                // Try to inline the SVG content; if missing, fall back to a placeholder.
+                try {
+                    const svgRes = await fetch(abs, { cache: 'no-cache' });
+                    if (svgRes.ok) {
+                        const svgText = await svgRes.text();
+                        // Wrap the SVG to ensure it scales to the positioned box.
+                        layer.innerHTML = `<div style="width:100%; height:100%;">${svgText}</div>`;
+                        const svgEl = layer.querySelector('svg');
+                        if (svgEl) {
+                            svgEl.setAttribute('width', '100%');
+                            svgEl.setAttribute('height', '100%');
+                            svgEl.setAttribute('preserveAspectRatio', 'none');
+                        }
+                    } else {
+                        layer.innerHTML = `
+                          <svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none">
+                            <rect x="2" y="2" width="96" height="96" rx="6" fill="none" stroke="#22c55e" stroke-width="2" stroke-dasharray="6 6"/>
+                            <text x="50" y="54" text-anchor="middle" font-size="10" fill="#16a34a">${alt}</text>
+                          </svg>
+                        `;
+                    }
+                } catch (e) {
+                    layer.innerHTML = `
+                      <svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none">
+                        <rect x="2" y="2" width="96" height="96" rx="6" fill="none" stroke="#fbbf24" stroke-width="2" stroke-dasharray="6 6"/>
+                        <text x="50" y="54" text-anchor="middle" font-size="10" fill="#f59e0b">${alt}</text>
+                      </svg>
+                    `;
+                }
+
+                canvasHost.appendChild(layer);
+            }
+
+            log(`Rendered ${roomImgs.length} room layers into viewport.`, 'success');
         }
 
         function renderDetections(boxes, dims) {
@@ -391,7 +731,37 @@
             const entry = document.createElement('div'); entry.className = `log-entry log-msg ${type}`;
             entry.innerHTML = `[${new Date().toLocaleTimeString()}] ${msg}`;
             container.appendChild(entry); container.scrollTop = container.scrollHeight;
+
+            const term = document.getElementById('terminal-output');
+            if (term) {
+                const prefix = new Date().toLocaleTimeString();
+                let cls = 'terminal-dim';
+                if (type === 'success') cls = '';
+                if (type === 'warn') cls = 'terminal-warn';
+                if (type === 'error') cls = 'terminal-error';
+                const line = document.createElement('div');
+                line.className = cls;
+                line.textContent = `${prefix}  ${msg}`;
+                term.appendChild(line);
+                term.scrollTop = term.scrollHeight;
+            }
         }
+
+        // Initialize connector line layout
+        window.addEventListener('resize', layoutStepConnector12);
+        setTimeout(() => {
+            const sidebar = document.querySelector('.sidebar');
+            if (sidebar) {
+                const line = document.createElement('div');
+                line.id = 'stepConnector12';
+                sidebar.appendChild(line);
+                const dot = document.createElement('div');
+                dot.id = 'stepDot12';
+                sidebar.appendChild(dot);
+                layoutStepConnector12();
+            }
+            initMetricsTicker();
+        }, 0);
     </script>
 </body>
 </html>
