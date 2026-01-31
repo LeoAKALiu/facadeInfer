@@ -28,6 +28,22 @@ def test_cases_thumbnails_use_demo_data_prefix() -> None:
         assert case["thumbnail"].startswith("/demo_data/")
 
 
+def test_cases_thumbnails_use_configured_asset_base_url(monkeypatch: MonkeyPatch) -> None:
+    """When configured, `/cases` should return OSS-backed absolute URLs."""
+    monkeypatch.setenv("DEMO_ASSET_BASE_URL", "https://facade-demo.oss-cn-beijing.aliyuncs.com/demo")
+    client = TestClient(index.app)
+
+    resp = client.get("/cases")
+    assert resp.status_code == 200
+    cases = resp.json()
+    assert isinstance(cases, list)
+    assert cases, "Expected at least one demo case"
+
+    for case in cases:
+        assert case["thumbnail"].startswith("https://facade-demo.oss-cn-beijing.aliyuncs.com/demo/")
+        assert case["ortho_image"].startswith("https://facade-demo.oss-cn-beijing.aliyuncs.com/demo/")
+
+
 def test_root_serves_html() -> None:
     """The root path `/` should serve the dashboard HTML (not a JSON 404)."""
     client = TestClient(index.app)

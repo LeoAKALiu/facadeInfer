@@ -40,6 +40,54 @@ image_processor = ImageProcessor(upload_dir="/tmp", static_dir=static_abs_path)
 semantic_analyzer = SemanticAnalyzer()
 layout_generator = LayoutGenerator()
 
+def _get_demo_asset_base_url() -> str | None:
+    """Return the configured absolute demo asset base URL, if any.
+
+    When set, this should be a full URL to an object storage folder (e.g. OSS),
+    like `https://bucket.oss-cn-beijing.aliyuncs.com/demo`.
+    """
+    base_url = os.getenv("DEMO_ASSET_BASE_URL", "").strip()
+    if not base_url:
+        return None
+    return base_url.rstrip("/")
+
+
+def _demo_original_filename(case_id: str) -> str:
+    """Return the original image filename for the given demo case."""
+    # The repository assets use `.JPG`, while the provided OSS layout uses `.jpg`.
+    if _get_demo_asset_base_url():
+        return f"{case_id}.jpg"
+    return f"{case_id}.JPG"
+
+
+def demo_asset_url(relative_path: str) -> str:
+    """Build a URL for a demo asset (image/json) for the UI/backend to consume."""
+    normalized = relative_path.lstrip("/")
+    base_url = _get_demo_asset_base_url()
+    if base_url:
+        return f"{base_url}/{normalized}"
+    return f"{DEMO_DATA_URL_PREFIX}/{normalized}"
+
+
+def demo_thumbnail_url(case_id: str) -> str:
+    """Return an optimized thumbnail URL for the case selector grid."""
+    base_url = _get_demo_asset_base_url()
+    url = demo_asset_url(_demo_original_filename(case_id))
+    if not base_url:
+        return url
+    # On OSS, use on-the-fly image processing to reduce payload.
+    return f"{url}?x-oss-process=image/resize,w_600/quality,Q_75/format,webp"
+
+
+def demo_ortho_preview_url(case_id: str) -> str:
+    """Return an optimized ortho preview URL for the main viewport."""
+    base_url = _get_demo_asset_base_url()
+    url = demo_asset_url(f"{case_id}_ortho.jpg")
+    if not base_url:
+        return url
+    # Keep enough resolution for the viewport while reducing transfer size.
+    return f"{url}?x-oss-process=image/resize,w_1800/quality,Q_80/format,webp"
+
 
 @app.get("/")
 async def root() -> Response:
@@ -63,7 +111,9 @@ async def get_cases() -> list[dict[str, Any]]:
         {
             "id": "IMG_1397",
             "name": "Commercial Office A",
-            "thumbnail": "/demo_data/IMG_1397.JPG",
+            "thumbnail": demo_thumbnail_url("IMG_1397"),
+            "ortho_image": demo_ortho_preview_url("IMG_1397"),
+            "original_image": demo_asset_url(_demo_original_filename("IMG_1397")),
             "step1_info": {
                 "structure": "RC Frame",
                 "year": "1995-2005",
@@ -80,7 +130,9 @@ async def get_cases() -> list[dict[str, Any]]:
         {
             "id": "IMG_1398",
             "name": "Residential Tower B",
-            "thumbnail": "/demo_data/IMG_1398.JPG",
+            "thumbnail": demo_thumbnail_url("IMG_1398"),
+            "ortho_image": demo_ortho_preview_url("IMG_1398"),
+            "original_image": demo_asset_url(_demo_original_filename("IMG_1398")),
             "step1_info": {
                 "structure": "Shear Wall",
                 "year": "2010-2020",
@@ -97,7 +149,9 @@ async def get_cases() -> list[dict[str, Any]]:
         {
             "id": "IMG_1399",
             "name": "Facade Case C",
-            "thumbnail": "/demo_data/IMG_1399.JPG",
+            "thumbnail": demo_thumbnail_url("IMG_1399"),
+            "ortho_image": demo_ortho_preview_url("IMG_1399"),
+            "original_image": demo_asset_url(_demo_original_filename("IMG_1399")),
             "step1_info": {
                 "structure": "Masonry-Concrete Mix",
                 "year": "1980s",
@@ -129,8 +183,12 @@ async def analyze_demo(request: Request, case_id: str = Form(...)) -> dict[str, 
         else:
             # In Vercel serverless deployments, the `public/` directory is served
             # by the edge but is not necessarily readable from the function FS.
-            base_url = str(request.base_url).rstrip("/")
-            json_url = f"{base_url}{DEMO_DATA_URL_PREFIX}/{case_id}_ortho.json"
+            base_url = _get_demo_asset_base_url()
+            if base_url:
+                json_url = f"{base_url}/{case_id}_ortho.json"
+            else:
+                request_base_url = str(request.base_url).rstrip("/")
+                json_url = f"{request_base_url}{DEMO_DATA_URL_PREFIX}/{case_id}_ortho.json"
 
             try:
                 import httpx
@@ -169,8 +227,12 @@ async def analyze_demo(request: Request, case_id: str = Form(...)) -> dict[str, 
             with Image.open(img_path) as img:
                 image_dims = img.size
         else:
-            base_url = str(request.base_url).rstrip("/")
-            img_url = f"{base_url}{DEMO_DATA_URL_PREFIX}/{case_id}_ortho.jpg"
+            base_url = _get_demo_asset_base_url()
+            if base_url:
+                img_url = f"{base_url}/{case_id}_ortho.jpg"
+            else:
+                request_base_url = str(request.base_url).rstrip("/")
+                img_url = f"{request_base_url}{DEMO_DATA_URL_PREFIX}/{case_id}_ortho.jpg"
 
             try:
                 import httpx
@@ -193,9 +255,8 @@ async def analyze_demo(request: Request, case_id: str = Form(...)) -> dict[str, 
             "risk_report": risk_report,
             "counts": counts,
             "images": {
-                # The `public/` directory is served at `/` in production.
-                "original": f"{DEMO_DATA_URL_PREFIX}/{case_id}.JPG",
-                "processed": f"{DEMO_DATA_URL_PREFIX}/{case_id}_ortho.jpg",
+                "original": demo_asset_url(_demo_original_filename(case_id)),
+                "processed": demo_asset_url(f"{case_id}_ortho.jpg"),
             },
             "debug": {
                 "boxes_count": len(bounding_boxes),
