@@ -98,3 +98,4 @@ def test_analyze_demo_images_use_demo_data_prefix(tmp_path: Path, monkeypatch: M
     assert payload["status"] == "success"
     assert payload["images"]["original"] == f"/demo_data/{case_id}.JPG"
     assert payload["images"]["processed"] == f"/demo_data/{case_id}_ortho.jpg"
+    assert isinstance(payload["masks"], list)

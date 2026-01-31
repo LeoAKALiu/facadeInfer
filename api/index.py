@@ -197,15 +197,26 @@ async def analyze_demo(request: Request, case_id: str = Form(...)) -> dict[str, 
 
             data = resp.json()
 
-        bounding_boxes = []
+        bounding_boxes: list[list[Any]] = []
+        mask_polygons: list[dict[str, Any]] = []
         counts = {"window": 0, "ac": 0, "door": 0, "other": 0}
 
         for shape in data["shapes"]:
+            # Preserve polygon "mask" annotation for the frontend.
+            label = shape.get("label", "unknown")
+            points = shape.get("points", [])
+            mask_polygons.append(
+                {
+                    "label": label,
+                    "points": points,
+                    "shape_type": shape.get("shape_type", "polygon"),
+                }
+            )
+
             pts = np.array(shape["points"])
             x_min, y_min = pts.min(axis=0)
             x_max, y_max = pts.max(axis=0)
             w, h = x_max - x_min, y_max - y_min
-            label = shape["label"]
             bounding_boxes.append([label, int(x_min), int(y_min), int(w), int(h)])
 
             if "window" in label:
@@ -248,6 +259,7 @@ async def analyze_demo(request: Request, case_id: str = Form(...)) -> dict[str, 
             "status": "success",
             "risk_report": risk_report,
             "counts": counts,
+            "masks": mask_polygons,
             "images": {
                 "original": demo_asset_url(_demo_original_filename(case_id)),
                 "processed": demo_asset_url(f"{case_id}_ortho.jpg"),

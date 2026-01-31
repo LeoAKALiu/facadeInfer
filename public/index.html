@@ -83,7 +83,13 @@
             font-size: 12px; font-weight: bold; color: var(--text-muted);
         }
         .step-item.active .step-indicator { background-color: var(--accent-primary); color: white; }
-        .step-item.completed .step-indicator { background-color: var(--accent-success); color: white; }
+        .step-item.completed {
+            background: rgba(16,185,129,0.14);
+            border-color: rgba(16,185,129,0.35);
+        }
+        .step-item.completed .step-indicator { background-color: var(--accent-success); color: white; border-color: rgba(16,185,129,0.45); }
+        .step-item.completed .step-title { color: rgba(167,243,208,0.95); }
+        .step-item.completed .step-desc { color: rgba(167,243,208,0.70); }
         .step-title { font-size: 14px; font-weight: 500; margin-bottom: 4px; }
         .step-desc { font-size: 12px; color: var(--text-muted); }
 
@@ -138,19 +144,18 @@
         #caseList { display: grid; grid-template-columns: 1fr; gap: 16px; margin-bottom: 24px; }
         .case-card { cursor: default; }
 
-        /* Sidebar connector (Step 1 -> Step 2) */
+        /* Sidebar connector lines (Step 1->2->3->4) */
         .sidebar { position: relative; }
-        #stepConnector12 {
+        .step-connector {
             position: absolute;
-            left: 36px; /* aligned with indicator center */
             width: 2px;
             background: rgba(255,255,255,0.18);
             border-radius: 2px;
             pointer-events: none;
         }
-        #stepDot12 {
+        .step-connector.active { background: rgba(16,185,129,0.35); }
+        .step-dot {
             position: absolute;
-            left: 30px;
             width: 14px;
             height: 14px;
             border-radius: 999px;
@@ -337,6 +342,7 @@
         const detectionLayer = document.getElementById('detectionLayer');
         const API_URL = location.origin;
         let selectedCase = null;
+        let step2Data = null;
 
         const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
@@ -379,6 +385,171 @@
         }
 
         function initMetricsTicker() {
+        function waitForImageLoad(imgEl) {
+            return new Promise((resolve) => {
+                if (!imgEl) return resolve();
+                // If already loaded
+                if (imgEl.complete && imgEl.naturalWidth > 0) return resolve();
+                const onLoad = () => {
+                    imgEl.removeEventListener('load', onLoad);
+                    imgEl.removeEventListener('error', onLoad);
+                    resolve();
+                };
+                imgEl.addEventListener('load', onLoad);
+                imgEl.addEventListener('error', onLoad);
+            });
+        }
+
+        async function transitionToOrtho(orthoSrc) {
+            // Crossfade from current image to ortho, keeping consistent geometry (object-fit: fill).
+            const viewport = document.getElementById('viewportMain');
+            if (!viewport) {
+                fadeInMainImage(orthoSrc, 'fill');
+                return;
+            }
+
+            // Ensure base image uses "fill" so overlay coordinates match.
+            mainImage.style.objectFit = 'fill';
+
+            const overlay = document.createElement('img');
+            overlay.src = orthoSrc;
+            overlay.style.cssText = 'position:absolute; inset:0; width:100%; height:100%; object-fit:fill; opacity:0; transition:opacity 380ms ease; pointer-events:none;';
+            viewport.appendChild(overlay);
+
+            await waitForImageLoad(overlay);
+            // Fade overlay in and base out.
+            mainImage.style.transition = 'opacity 380ms ease';
+            mainImage.style.opacity = '0';
+            overlay.style.opacity = '1';
+            await sleep(420);
+
+            // Commit ortho into mainImage and remove overlay.
+            mainImage.src = orthoSrc;
+            mainImage.style.opacity = '1';
+            overlay.remove();
+            await waitForImageLoad(mainImage);
+        }
+
+        function ensureOverlaySvg(dims) {
+            detectionLayer.innerHTML = '';
+            const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+            svg.setAttribute('width', '100%');
+            svg.setAttribute('height', '100%');
+            svg.setAttribute('viewBox', `0 0 ${dims[0]} ${dims[1]}`);
+            svg.setAttribute('preserveAspectRatio', 'none');
+            svg.style.cssText = 'position:absolute; inset:0; pointer-events:none;';
+            detectionLayer.appendChild(svg);
+            return svg;
+        }
+
+        function pathFromPoints(points) {
+            if (!points || points.length === 0) return '';
+            const [x0, y0] = points[0];
+            let d = `M ${x0} ${y0}`;
+            for (let i = 1; i < points.length; i++) {
+                const [x, y] = points[i];
+                d += ` L ${x} ${y}`;
+            }
+            return d + ' Z';
+        }
+
+        function renderMaskOverlay(masks, dims) {
+            const svg = ensureOverlaySvg(dims);
+            for (const m of masks || []) {
+                const label = m.label || 'unknown';
+                const pts = m.points || [];
+                if (!pts.length) continue;
+
+                const p = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                p.setAttribute('d', pathFromPoints(pts));
+                const isWindow = String(label).includes('window');
+                const stroke = isWindow ? '#f472b6' : '#fbbf24';
+                const fill = isWindow ? 'rgba(244,114,182,0.18)' : 'rgba(251,191,36,0.14)';
+                p.setAttribute('fill', fill);
+                p.setAttribute('stroke', stroke);
+                p.setAttribute('stroke-width', '2');
+                p.setAttribute('vector-effect', 'non-scaling-stroke');
+                svg.appendChild(p);
+            }
+        }
+
+        function masksToBBoxes(masks) {
+            const out = [];
+            for (const m of masks || []) {
+                const pts = m.points || [];
+                if (!pts.length) continue;
+                let xMin = Infinity, yMin = Infinity, xMax = -Infinity, yMax = -Infinity;
+                for (const [x, y] of pts) {
+                    xMin = Math.min(xMin, x);
+                    yMin = Math.min(yMin, y);
+                    xMax = Math.max(xMax, x);
+                    yMax = Math.max(yMax, y);
+                }
+                out.push({
+                    label: m.label || 'unknown',
+                    x: xMin, y: yMin,
+                    w: xMax - xMin, h: yMax - yMin,
+                    cx: (xMin + xMax) / 2,
+                    cy: (yMin + yMax) / 2,
+                });
+            }
+            return out;
+        }
+
+        function renderBBoxesAndAxes(bboxes, dims) {
+            const svg = ensureOverlaySvg(dims);
+
+            // Draw bboxes
+            for (const b of bboxes) {
+                const r = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+                const isWindow = String(b.label).includes('window');
+                const stroke = isWindow ? '#f472b6' : '#fbbf24';
+                const fill = isWindow ? 'rgba(244,114,182,0.10)' : 'rgba(251,191,36,0.08)';
+                r.setAttribute('x', String(b.x));
+                r.setAttribute('y', String(b.y));
+                r.setAttribute('width', String(b.w));
+                r.setAttribute('height', String(b.h));
+                r.setAttribute('fill', fill);
+                r.setAttribute('stroke', stroke);
+                r.setAttribute('stroke-width', '1.5');
+                r.setAttribute('vector-effect', 'non-scaling-stroke');
+                svg.appendChild(r);
+            }
+
+            // Fit vertical axes using window bboxes
+            const windows = bboxes.filter(b => String(b.label).includes('window'));
+            windows.sort((a, b) => a.cx - b.cx);
+            const clusters = [];
+            const tol = 60; // px in ortho coordinate system
+            for (const w of windows) {
+                const last = clusters[clusters.length - 1];
+                if (!last || Math.abs(last.meanX - w.cx) > tol) {
+                    clusters.push({ meanX: w.cx, items: [w] });
+                } else {
+                    last.items.push(w);
+                    last.meanX = last.items.reduce((s, it) => s + it.cx, 0) / last.items.length;
+                }
+            }
+
+            for (const c of clusters) {
+                if (c.items.length < 2) continue;
+                const ys = c.items.map(it => it.cy).sort((a, b) => a - b);
+                const yMin = Math.max(0, ys[0] - 250);
+                const yMax = Math.min(dims[1], ys[ys.length - 1] + 250);
+
+                const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                line.setAttribute('x1', String(c.meanX));
+                line.setAttribute('x2', String(c.meanX));
+                line.setAttribute('y1', String(yMin));
+                line.setAttribute('y2', String(yMax));
+                line.setAttribute('stroke', 'rgba(255,255,255,0.55)');
+                line.setAttribute('stroke-width', '1');
+                line.setAttribute('stroke-dasharray', '6 6');
+                line.setAttribute('vector-effect', 'non-scaling-stroke');
+                svg.appendChild(line);
+            }
+        }
+
             const gpuEl = document.getElementById('metricGpu');
             const vramEl = document.getElementById('metricVram');
             const tempEl = document.getElementById('metricTemp');
@@ -399,55 +570,76 @@
             }, 1000);
         }
 
-        function layoutStepConnector12() {
-            const sidebar = document.querySelector('.sidebar');
-            const step1 = document.getElementById('step1Btn');
-            const step2 = document.getElementById('step2Btn');
-            const line = document.getElementById('stepConnector12');
-            const dot = document.getElementById('stepDot12');
-            if (!sidebar || !step1 || !step2 || !line || !dot) return;
-
-            const sRect = sidebar.getBoundingClientRect();
-            const i1 = step1.querySelector('.step-indicator')?.getBoundingClientRect();
-            const i2 = step2.querySelector('.step-indicator')?.getBoundingClientRect();
-            if (!i1 || !i2) return;
-
-            const xCenter = (i1.left + i1.right) / 2 - sRect.left;
-            const y1 = (i1.top + i1.bottom) / 2 - sRect.top;
-            const y2 = (i2.top + i2.bottom) / 2 - sRect.top;
-
-            line.style.left = `${xCenter}px`;
-            line.style.top = `${y1}px`;
-            line.style.height = `${Math.max(0, y2 - y1)}px`;
-
-            dot.style.left = `${xCenter - 7}px`;
-            dot.style.top = `${y1 - 7}px`;
+        function getStepIndicatorCenter(stepEl, containerEl) {
+            const cRect = containerEl.getBoundingClientRect();
+            const ind = stepEl.querySelector('.step-indicator')?.getBoundingClientRect();
+            if (!ind) return null;
+            return {
+                x: (ind.left + ind.right) / 2 - cRect.left,
+                y: (ind.top + ind.bottom) / 2 - cRect.top,
+            };
         }
 
-        async function animateStep1ToStep2() {
+        function layoutStepConnectors() {
             const sidebar = document.querySelector('.sidebar');
-            const step1 = document.getElementById('step1Btn');
-            const step2 = document.getElementById('step2Btn');
-            const dot = document.getElementById('stepDot12');
-            if (!sidebar || !step1 || !step2 || !dot) return;
+            if (!sidebar) return;
+            const pairs = [
+                [1, 2],
+                [2, 3],
+                [3, 4],
+            ];
 
-            layoutStepConnector12();
-            const sRect = sidebar.getBoundingClientRect();
-            const i1 = step1.querySelector('.step-indicator')?.getBoundingClientRect();
-            const i2 = step2.querySelector('.step-indicator')?.getBoundingClientRect();
-            if (!i1 || !i2) return;
+            for (const [from, to] of pairs) {
+                const stepFrom = document.getElementById(`step${from}Btn`);
+                const stepTo = document.getElementById(`step${to}Btn`);
+                const line = document.getElementById(`stepConnector${from}${to}`);
+                const dot = document.getElementById(`stepDot${from}${to}`);
+                if (!stepFrom || !stepTo || !line || !dot) continue;
 
-            const y1 = (i1.top + i1.bottom) / 2 - sRect.top;
-            const y2 = (i2.top + i2.bottom) / 2 - sRect.top;
+                const c1 = getStepIndicatorCenter(stepFrom, sidebar);
+                const c2 = getStepIndicatorCenter(stepTo, sidebar);
+                if (!c1 || !c2) continue;
 
+                const xCenter = (c1.x + c2.x) / 2;
+                const y1 = c1.y;
+                const y2 = c2.y;
+
+                line.style.left = `${xCenter}px`;
+                line.style.top = `${y1}px`;
+                line.style.height = `${Math.max(0, y2 - y1)}px`;
+
+                dot.style.left = `${xCenter - 7}px`;
+                dot.style.top = `${y1 - 7}px`;
+            }
+        }
+
+        async function animateStepProgress(from, to) {
+            const sidebar = document.querySelector('.sidebar');
+            if (!sidebar) return;
+
+            const stepFrom = document.getElementById(`step${from}Btn`);
+            const stepTo = document.getElementById(`step${to}Btn`);
+            const line = document.getElementById(`stepConnector${from}${to}`);
+            const dot = document.getElementById(`stepDot${from}${to}`);
+            if (!stepFrom || !stepTo || !line || !dot) return;
+
+            layoutStepConnectors();
+            const c1 = getStepIndicatorCenter(stepFrom, sidebar);
+            const c2 = getStepIndicatorCenter(stepTo, sidebar);
+            if (!c1 || !c2) return;
+
+            const dy = Math.max(0, c2.y - c1.y);
             dot.style.opacity = '1';
-            dot.style.transition = 'transform 600ms cubic-bezier(.2,.8,.2,1), opacity 250ms ease';
-            dot.style.transform = `translateY(${Math.max(0, y2 - y1)}px)`;
+            dot.style.transition = 'transform 650ms cubic-bezier(.2,.8,.2,1), opacity 220ms ease';
+            dot.style.transform = `translateY(${dy}px)`;
 
-            await new Promise(r => setTimeout(r, 650));
+            // Make the connector a bit brighter once the dot starts moving.
+            line.classList.add('active');
+
+            await sleep(700);
             dot.style.opacity = '0';
             dot.style.transform = 'translateY(0)';
-            await new Promise(r => setTimeout(r, 250));
+            await sleep(220);
         }
 
         async function showCaseSelector() {
@@ -519,7 +711,7 @@
                 log("Appearance recognition complete.", 'success');
 
                 document.getElementById('step1Btn').classList.add('completed');
-                await animateStep1ToStep2();
+                await animateStepProgress(1, 2);
                 document.getElementById('step2Btn').disabled = false;
                 document.getElementById('step2Btn').classList.add('active');
             })();
@@ -535,23 +727,42 @@
                 '[STEP2] exporting debug overlays',
             ]);
 
-            fadeInMainImage(selectedCase.ortho_image || `${API_URL}/demo_data/${selectedCase.id}_ortho.jpg`, 'fill');
-            log("Geometric distortion corrected.", 'success');
+            // Ensure Step1 is fully marked completed when Step2 begins.
+            document.getElementById('step1Btn').classList.add('completed');
 
+            const orthoSrc = selectedCase.ortho_image || `${API_URL}/demo_data/${selectedCase.id}_ortho.jpg`;
+
+            // Start analysis in parallel, but DO NOT render overlays until ortho is shown.
             const formData = new FormData();
             formData.append('case_id', selectedCase.id);
+            const analysisPromise = fetch(`${API_URL}/analyze_demo`, { method: 'POST', body: formData }).then(r => r.json());
+
+            // Smoothly transition from original -> ortho first.
+            await transitionToOrtho(orthoSrc);
+            log("Ortho view ready. Rendering mask annotations...", 'success');
+
             try {
-                const res = await fetch(`${API_URL}/analyze_demo`, { method: 'POST', body: formData });
-                const data = await res.json();
+                const data = await analysisPromise;
+                step2Data = data;
+
                 document.getElementById('panel2').style.display = 'block';
                 document.getElementById('countWindow').innerText = data.counts.window;
                 document.getElementById('countAC').innerText = data.counts.ac;
                 document.getElementById('countOther').innerText = data.counts.door;
-                renderDetections(data.debug.raw_boxes, data.debug.image_dims);
-                log(`Detected ${data.debug.boxes_count} components.`, 'success');
+
+                // Mask overlay (polygons) aligned to the ortho image.
+                if (data.masks && data.debug && data.debug.image_dims) {
+                    renderMaskOverlay(data.masks, data.debug.image_dims);
+                }
+
+                log(`Rendered ${data.debug.boxes_count} masks.`, 'success');
+                document.getElementById('step2Btn').classList.add('completed');
+                await animateStepProgress(2, 3);
                 document.getElementById('step3Btn').disabled = false;
                 document.getElementById('step3Btn').classList.add('active');
-            } catch (e) { log("Analysis failed", "warn"); }
+            } catch (e) {
+                log("Analysis failed", "warn");
+            }
         }
 
         function runStep3() {
@@ -564,27 +775,23 @@
                     '[STEP3] generating layout hypotheses',
                 ]);
                 log("Analyzing facade geometry...", 'info');
-            const windows = Array.from(detectionLayer.querySelectorAll('div')).filter(el => el.innerText.includes('window'));
-            const cols = {};
-            windows.forEach(win => {
-                const x = parseInt(win.style.left);
-                const matchedX = Object.keys(cols).find(cx => Math.abs(parseInt(cx) - x) < 30);
-                if (matchedX) cols[matchedX].push(win); else cols[x] = [win];
-            });
-            Object.values(cols).forEach(col => {
-                if (col.length < 2) return;
-                const sorted = col.sort((a, b) => parseInt(a.style.top) - parseInt(b.style.top));
-                const first = sorted[0], last = sorted[sorted.length-1];
-                const line = document.createElement('div');
-                line.style.cssText = `position:absolute; left:${parseInt(first.style.left) + parseInt(first.style.width)/2}px; top:${first.style.top}; width:0; height:${parseInt(last.style.top) - parseInt(first.style.top) + parseInt(last.style.height)}px; border-left:1px dashed rgba(255,255,255,0.5); pointer-events:none; z-index:5;`;
-                detectionLayer.appendChild(line);
-            });
+
+                // Convert masks -> bboxes and fit vertical grid axes.
+                if (step2Data && step2Data.masks && step2Data.debug && step2Data.debug.image_dims) {
+                    const bboxes = masksToBBoxes(step2Data.masks);
+                    renderBBoxesAndAxes(bboxes, step2Data.debug.image_dims);
+                } else {
+                    log('Missing Step2 mask data; cannot compute axis grid.', 'warn');
+                }
+
             document.getElementById('panel3').style.display = 'block';
             document.getElementById('valBays').innerText = selectedCase.step3_info.bays;
             document.getElementById('valSymmetry').innerText = selectedCase.step3_info.symmetry;
             document.getElementById('valKitchen').innerText = selectedCase.step3_info.kitchen_est;
             document.getElementById('valBedroom').innerText = selectedCase.step3_info.bedroom_est;
             log("Spatial structure analyzed.", 'success');
+            document.getElementById('step3Btn').classList.add('completed');
+            await animateStepProgress(3, 4);
             document.getElementById('step4Btn').disabled = false;
             document.getElementById('step4Btn').classList.add('active');
             })();
@@ -721,11 +928,29 @@
                             svgEl.setAttribute('width', '100%');
                             svgEl.setAttribute('height', '100%');
                             svgEl.setAttribute('preserveAspectRatio', 'none');
+
+                            // Normalize stroke styling across rooms (fixed stroke width, dense dashes, sharp corners).
+                            svgEl.querySelectorAll('path, polygon, polyline, rect, line, circle, ellipse').forEach(el => {
+                                el.setAttribute('vector-effect', 'non-scaling-stroke');
+                                el.setAttribute('stroke-width', '1.2');
+                                el.setAttribute('stroke-dasharray', '3 2');
+                                el.setAttribute('stroke-linecap', 'butt');
+                                el.setAttribute('stroke-linejoin', 'miter');
+                                if (el.tagName.toLowerCase() === 'rect') {
+                                    el.removeAttribute('rx');
+                                    el.removeAttribute('ry');
+                                }
+                                // Prefer outlines
+                                if (!el.getAttribute('stroke')) {
+                                    el.setAttribute('stroke', '#111');
+                                }
+                                el.setAttribute('fill', 'none');
+                            });
                         }
                     } else {
                         layer.innerHTML = `
                           <svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none">
-                            <rect x="2" y="2" width="96" height="96" rx="6" fill="none" stroke="#22c55e" stroke-width="2" stroke-dasharray="6 6"/>
+                            <rect x="2" y="2" width="96" height="96" fill="none" stroke="#22c55e" stroke-width="1.2" stroke-dasharray="3 2" stroke-linecap="butt" stroke-linejoin="miter"/>
                             <text x="50" y="54" text-anchor="middle" font-size="10" fill="#16a34a">${alt}</text>
                           </svg>
                         `;
@@ -733,7 +958,7 @@
                 } catch (e) {
                     layer.innerHTML = `
                       <svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none">
-                        <rect x="2" y="2" width="96" height="96" rx="6" fill="none" stroke="#fbbf24" stroke-width="2" stroke-dasharray="6 6"/>
+                        <rect x="2" y="2" width="96" height="96" fill="none" stroke="#fbbf24" stroke-width="1.2" stroke-dasharray="3 2" stroke-linecap="butt" stroke-linejoin="miter"/>
                         <text x="50" y="54" text-anchor="middle" font-size="10" fill="#f59e0b">${alt}</text>
                       </svg>
                     `;
@@ -781,17 +1006,27 @@
         }
 
         // Initialize connector line layout
-        window.addEventListener('resize', layoutStepConnector12);
+        window.addEventListener('resize', layoutStepConnectors);
         setTimeout(() => {
             const sidebar = document.querySelector('.sidebar');
             if (sidebar) {
-                const line = document.createElement('div');
-                line.id = 'stepConnector12';
-                sidebar.appendChild(line);
-                const dot = document.createElement('div');
-                dot.id = 'stepDot12';
-                sidebar.appendChild(dot);
-                layoutStepConnector12();
+                const pairs = [
+                    [1, 2],
+                    [2, 3],
+                    [3, 4],
+                ];
+                for (const [from, to] of pairs) {
+                    const line = document.createElement('div');
+                    line.id = `stepConnector${from}${to}`;
+                    line.className = 'step-connector';
+                    sidebar.appendChild(line);
+
+                    const dot = document.createElement('div');
+                    dot.id = `stepDot${from}${to}`;
+                    dot.className = 'step-dot';
+                    sidebar.appendChild(dot);
+                }
+                layoutStepConnectors();
             }
             initMetricsTicker();
         }, 0);
