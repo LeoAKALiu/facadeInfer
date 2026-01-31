@@ -400,23 +400,60 @@
             });
         }
 
-        async function transitionToOrtho(orthoSrc) {
+        function setViewportStatus(text) {
+            const viewport = document.getElementById('viewportMain');
+            if (!viewport) return;
+            let el = document.getElementById('viewportStatus');
+            if (!el) {
+                el = document.createElement('div');
+                el.id = 'viewportStatus';
+                el.style.cssText = 'position:absolute; left:14px; top:14px; padding:8px 10px; border-radius:8px; background:rgba(0,0,0,0.55); border:1px solid rgba(255,255,255,0.12); color:rgba(255,255,255,0.85); font-size:12px; z-index:60; backdrop-filter: blur(8px);';
+                viewport.appendChild(el);
+            }
+            if (!text) {
+                el.remove();
+                return;
+            }
+            el.textContent = text;
+        }
+
+        async function transitionToOrtho(primarySrc, fallbackSrc) {
             // Crossfade from current image to ortho, keeping consistent geometry (object-fit: fill).
             const viewport = document.getElementById('viewportMain');
             if (!viewport) {
-                fadeInMainImage(orthoSrc, 'fill');
-                return;
+                fadeInMainImage(primarySrc, 'fill');
+                return true;
             }
 
             // Ensure base image uses "fill" so overlay coordinates match.
             mainImage.style.objectFit = 'fill';
+            mainImage.style.opacity = '1';
+
+            setViewportStatus('Loading ORTHO view…');
 
             const overlay = document.createElement('img');
-            overlay.src = orthoSrc;
-            overlay.style.cssText = 'position:absolute; inset:0; width:100%; height:100%; object-fit:fill; opacity:0; transition:opacity 380ms ease; pointer-events:none;';
+            overlay.style.cssText = 'position:absolute; inset:0; width:100%; height:100%; object-fit:fill; opacity:0; transition:opacity 380ms ease; pointer-events:none; z-index: 20;';
             viewport.appendChild(overlay);
 
-            await waitForImageLoad(overlay);
+            const tryLoad = async (src) => {
+                overlay.src = src;
+                await waitForImageLoad(overlay);
+                return overlay.naturalWidth > 0;
+            };
+
+            let ok = await tryLoad(primarySrc);
+            if (!ok && fallbackSrc) {
+                log(`Failed to load ortho preview, falling back to ${fallbackSrc}`, 'warn');
+                ok = await tryLoad(fallbackSrc);
+            }
+
+            if (!ok) {
+                overlay.remove();
+                setViewportStatus('');
+                log('Ortho image failed to load.', 'warn');
+                return false;
+            }
+
             // Fade overlay in and base out.
             mainImage.style.transition = 'opacity 380ms ease';
             mainImage.style.opacity = '0';
@@ -424,10 +461,12 @@
             await sleep(420);
 
             // Commit ortho into mainImage and remove overlay.
-            mainImage.src = orthoSrc;
+            mainImage.src = overlay.src;
             mainImage.style.opacity = '1';
             overlay.remove();
             await waitForImageLoad(mainImage);
+            setViewportStatus('');
+            return true;
         }
 
         function ensureOverlaySvg(dims) {
@@ -731,38 +770,53 @@
             document.getElementById('step1Btn').classList.add('completed');
 
             const orthoSrc = selectedCase.ortho_image || `${API_URL}/demo_data/${selectedCase.id}_ortho.jpg`;
+            const fallbackOrtho = `${API_URL}/demo_data/${selectedCase.id}_ortho.jpg`;
 
             // Start analysis in parallel, but DO NOT render overlays until ortho is shown.
             const formData = new FormData();
             formData.append('case_id', selectedCase.id);
-            const analysisPromise = fetch(`${API_URL}/analyze_demo`, { method: 'POST', body: formData }).then(r => r.json());
+            const analysisPromise = fetch(`${API_URL}/analyze_demo`, { method: 'POST', body: formData }).then(async (r) => {
+                const j = await r.json().catch(() => ({}));
+                if (!r.ok || j.status === 'error' || j.detail) throw new Error(j.detail || `HTTP ${r.status}`);
+                return j;
+            });
 
-            // Smoothly transition from original -> ortho first.
-            await transitionToOrtho(orthoSrc);
-            log("Ortho view ready. Rendering mask annotations...", 'success');
+            log(`Loading ortho: ${orthoSrc}`, 'info');
+            const orthoOkPromise = transitionToOrtho(orthoSrc, fallbackOrtho);
 
+            let data;
             try {
-                const data = await analysisPromise;
+                data = await analysisPromise;
                 step2Data = data;
 
                 document.getElementById('panel2').style.display = 'block';
                 document.getElementById('countWindow').innerText = data.counts.window;
                 document.getElementById('countAC').innerText = data.counts.ac;
                 document.getElementById('countOther').innerText = data.counts.door;
+            } catch (e) {
+                log(`Analysis failed: ${e.message || e}`, 'warn');
+                return;
+            }
 
-                // Mask overlay (polygons) aligned to the ortho image.
-                if (data.masks && data.debug && data.debug.image_dims) {
-                    renderMaskOverlay(data.masks, data.debug.image_dims);
-                }
+            const orthoOk = await Promise.race([orthoOkPromise, sleep(12000).then(() => false)]);
+            if (!orthoOk) {
+                log('Ortho view still loading; delaying mask render.', 'warn');
+                // Don't render masks until ortho is visible; user can retry Step2.
+                return;
+            }
 
-                log(`Rendered ${data.debug.boxes_count} masks.`, 'success');
+            log("Ortho view ready. Rendering mask annotations...", 'success');
+
+            // Mask overlay (polygons) aligned to the ortho image.
+            if (data.masks && data.debug && data.debug.image_dims) {
+                renderMaskOverlay(data.masks, data.debug.image_dims);
+            }
+
+            log(`Rendered ${data.debug.boxes_count} masks.`, 'success');
                 document.getElementById('step2Btn').classList.add('completed');
                 await animateStepProgress(2, 3);
                 document.getElementById('step3Btn').disabled = false;
                 document.getElementById('step3Btn').classList.add('active');
-            } catch (e) {
-                log("Analysis failed", "warn");
-            }
         }
 
         function runStep3() {
