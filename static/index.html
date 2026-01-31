@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Architectural AI Reverse Engineering Dashboard</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/remixicon/4.6.0/remixicon.min.css" rel="stylesheet">
+    <style>
+        :root {
+            --bg-background: #09090b;
+            --bg-card: #18181b;
+            --bg-muted: #27272a;
+            --text-primary: #fafafa;
+            --text-secondary: #a1a1aa;
+            --text-muted: #71717a;
+            --accent-primary: #3b82f6;
+            --accent-success: #10b981;
+            --border-color: #27272a;
+            --grid-color: rgba(255, 255, 255, 0.05);
+        }
+
+        @font-face {
+            font-family: 'Inter';
+            src: url('https://assets-persist.lovart.ai/agent-static-assets/NotoSansHans-Regular.otf');
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            background-color: var(--bg-background);
+            color: var(--text-primary);
+            font-family: 'Inter', sans-serif;
+            width: 100vw; height: 100vh;
+            overflow: hidden; display: flex; flex-direction: column;
+        }
+
+        header {
+            height: 64px; border-bottom: 1px solid var(--border-color);
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 0 24px; background-color: var(--bg-background);
+        }
+
+        .header-left { display: flex; align-items: center; gap: 12px; }
+        .logo-icon {
+            width: 32px; height: 32px;
+            background: linear-gradient(135deg, var(--accent-primary), #60a5fa);
+            border-radius: 6px; display: flex; align-items: center; justify-content: center;
+            color: white; font-size: 18px;
+        }
+        .header-title { font-weight: bold; font-size: 18px; }
+
+        .header-right { display: flex; gap: 12px; align-items: center; }
+
+        .btn {
+            height: 36px; padding: 0 16px; border-radius: 6px;
+            font-size: 14px; display: flex; align-items: center; gap: 8px;
+            cursor: pointer; transition: all 0.2s; border: 1px solid transparent;
+        }
+        .btn-outline { background: transparent; border-color: var(--border-color); color: var(--text-primary); }
+        .btn-primary { background: var(--text-primary); color: var(--bg-background); }
+        .btn:disabled { opacity: 0.3; cursor: not-allowed; }
+
+        .main-container { display: flex; flex: 1; height: calc(100vh - 64px); min-height: 0; }
+
+        .sidebar {
+            width: 320px; border-right: 1px solid var(--border-color);
+            padding: 32px 24px; background-color: var(--bg-background);
+            display: flex; flex-direction: column; gap: 8px;
+        }
+
+        .step-item {
+            position: relative; padding: 16px; border-radius: 8px;
+            cursor: pointer; border: 1px solid transparent;
+            transition: all 0.2s; display: flex; gap: 16px;
+            width: 100%; text-align: left; background: none; color: inherit;
+        }
+        .step-item.active { background-color: var(--bg-card); border-color: var(--border-color); }
+        .step-indicator {
+            width: 24px; height: 24px; border-radius: 50%;
+            background-color: var(--bg-muted); border: 2px solid var(--border-color);
+            display: flex; align-items: center; justify-content: center;
+            font-size: 12px; font-weight: bold; color: var(--text-muted);
+        }
+        .step-item.active .step-indicator { background-color: var(--accent-primary); color: white; }
+        .step-item.completed .step-indicator { background-color: var(--accent-success); color: white; }
+        .step-title { font-size: 14px; font-weight: 500; margin-bottom: 4px; }
+        .step-desc { font-size: 12px; color: var(--text-muted); }
+
+        .canvas-area {
+            flex: 1; background-color: #000;
+            background-image: linear-gradient(var(--grid-color) 1px, transparent 1px), linear-gradient(90deg, var(--grid-color) 1px, transparent 1px);
+            background-size: 40px 40px; position: relative;
+            display: flex; align-items: center; justify-content: center; overflow: hidden;
+        }
+
+        .viewport-card { width: 100%; height: 100%; position: relative; display: flex; flex-direction: column; }
+        .viewport-content { flex: 1; position: relative; background: #111; }
+        .vis-layer { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; }
+
+        .data-panel {
+            width: 350px; border-left: 1px solid var(--border-color);
+            background-color: var(--bg-background); padding: 24px;
+            display: flex; flex-direction: column; gap: 24px; overflow-y: auto;
+        }
+        .panel-section-title { font-size: 14px; font-weight: bold; margin-bottom: 12px; display: flex; justify-content: space-between; }
+        .data-card { background-color: var(--bg-card); border: 1px solid var(--border-color); border-radius: 8px; padding: 16px; }
+        .metric-row { display: flex; justify-content: space-between; margin-bottom: 8px; }
+        .metric-label { font-size: 12px; color: var(--text-muted); }
+        .metric-value { font-size: 16px; font-weight: bold; }
+
+        .log-container {
+            font-family: monospace; font-size: 11px; color: var(--text-secondary);
+            background: #111; padding: 12px; border-radius: 6px; height: 120px;
+            overflow-y: auto; border: 1px solid var(--border-color);
+        }
+        .log-entry { margin-bottom: 4px; }
+        .log-msg.info { color: #60a5fa; }
+        .log-msg.success { color: #34d399; }
+
+        #caseSelectorModal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.8); z-index: 1000; align-items: center; justify-content: center; }
+        .case-card { background: var(--bg-muted); border: 1px solid var(--border-color); border-radius: 8px; overflow: hidden; cursor: pointer; transition: transform 0.2s; }
+        .case-card:hover { transform: scale(1.05); }
+
+        .prop-item { background: var(--bg-muted); padding: 10px; border-radius: 6px; }
+        .prop-label { font-size: 10px; color: var(--text-muted); margin-bottom: 2px; }
+        .prop-val { font-size: 13px; font-weight: 500; }
+        .property-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="header-left">
+            <div class="logo-icon"><i class="ri-building-2-line"></i></div>
+            <div class="header-title">StructAI Reverse Engine</div>
+        </div>
+        <div class="header-right">
+            <div id="aiStatus" style="font-size: 12px; color: var(--accent-success); margin-right: 12px;">
+                ● System Ready: Demo Mode
+            </div>
+            <button class="btn btn-primary" onclick="showCaseSelector()">
+                <i class="ri-folder-open-line"></i> Select Demo Case
+            </button>
+            <button class="btn btn-outline" onclick="location.reload()">
+                <i class="ri-refresh-line"></i> Reset
+            </button>
+        </div>
+    </header>
+
+    <div class="main-container">
+        <div class="sidebar">
+            <button class="step-item" id="step1Btn" onclick="runStep1()" disabled>
+                <div class="step-indicator">1</div>
+                <div class="step-content">
+                    <div class="step-title">外观识别</div>
+                    <div class="step-desc">结构形式与建成年代识别</div>
+                </div>
+            </button>
+            <button class="step-item" id="step2Btn" onclick="runStep2()" disabled>
+                <div class="step-indicator">2</div>
+                <div class="step-content">
+                    <div class="step-title">语义识别</div>
+                    <div class="step-desc">构件分割与坐标映射</div>
+                </div>
+            </button>
+            <button class="step-item" id="step3Btn" onclick="runStep3()" disabled>
+                <div class="step-indicator">3</div>
+                <div class="step-content">
+                    <div class="step-title">几何分析</div>
+                    <div class="step-desc">建筑开间与平面布局推测</div>
+                </div>
+            </button>
+            <button class="step-item" id="step4Btn" onclick="runStep4()" disabled>
+                <div class="step-indicator">4</div>
+                <div class="step-content">
+                    <div class="step-title">室内布局生成</div>
+                    <div class="step-desc">2D矢量平面图自动重建</div>
+                </div>
+            </button>
+        </div>
+
+        <div class="canvas-area">
+            <div class="viewport-card">
+                <div class="viewport-content" id="viewportMain">
+                    <div class="vis-layer">
+                         <img id="mainImage" src="" style="width: 100%; height: 100%; object-fit: fill; display: none;">
+                    </div>
+                    <div id="detectionLayer" class="vis-layer" style="pointer-events: none;"></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="data-panel">
+            <div id="panel1" style="display: none;">
+                <div class="panel-section-title">建筑基本信息 <i class="ri-building-line"></i></div>
+                <div class="data-card">
+                    <div class="metric-row"><span class="metric-label">结构形式</span><span class="metric-value" id="valStructure">-</span></div>
+                    <div class="metric-row"><span class="metric-label">建成年代</span><span class="metric-value" id="valYear">-</span></div>
+                    <div class="metric-row"><span class="metric-label">建筑用途</span><span class="metric-value" id="valUse">-</span></div>
+                </div>
+            </div>
+
+            <div id="panel2" style="display: none;">
+                <div class="panel-section-title">语义分割统计 <i class="ri-scan-2-line"></i></div>
+                <div class="property-grid">
+                    <div class="prop-item"><div class="prop-label">窗户数量</div><div class="prop-val" id="countWindow">0</div></div>
+                    <div class="prop-item"><div class="prop-label">空调外机</div><div class="prop-val" id="countAC">0</div></div>
+                    <div class="prop-item"><div class="prop-label">门/阳台</div><div class="prop-val" id="countOther">0</div></div>
+                    <div class="prop-item"><div class="prop-label">识别置信度</div><div class="prop-val">98.2%</div></div>
+                </div>
+            </div>
+
+            <div id="panel3" style="display: none;">
+                <div class="panel-section-title">空间几何分析 <i class="ri-ruler-2-line"></i></div>
+                <div class="data-card">
+                    <div class="metric-row"><span class="metric-label">识别开间数</span><span class="metric-value" id="valBays">-</span></div>
+                    <div class="metric-row"><span class="metric-label">户型对称性</span><span class="metric-value" id="valSymmetry">-</span></div>
+                    <div style="margin-top: 12px; font-size: 11px; color: var(--text-secondary);">
+                        <div style="margin-bottom: 4px;">● 推测厨房: <span id="valKitchen">-</span></div>
+                        <div>● 推测卧室: <span id="valBedroom">-</span></div>
+                    </div>
+                </div>
+            </div>
+
+            <div style="margin-top: auto;">
+                <div class="panel-section-title">System Output <i class="ri-terminal-box-line"></i></div>
+                <div class="log-container" id="logContainer"></div>
+            </div>
+        </div>
+    </div>
+
+    <div id="caseSelectorModal">
+        <div style="background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 12px; padding: 32px; width: 600px;">
+            <h2 style="margin-bottom: 24px;">Select Architectural Case</h2>
+            <div id="caseList" style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 24px;"></div>
+            <div style="display: flex; justify-content: flex-end;">
+                <button class="btn btn-outline" onclick="document.getElementById('caseSelectorModal').style.display='none'">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const mainImage = document.getElementById('mainImage');
+        const detectionLayer = document.getElementById('detectionLayer');
+        const API_URL = location.origin;
+        let selectedCase = null;
+
+        async function showCaseSelector() {
+            const modal = document.getElementById('caseSelectorModal');
+            const list = document.getElementById('caseList');
+            modal.style.display = 'flex';
+            try {
+                const res = await fetch(`${API_URL}/cases`);
+                const cases = await res.json();
+                list.innerHTML = '';
+                cases.forEach(c => {
+                    const div = document.createElement('div');
+                    div.className = 'case-card';
+                    div.innerHTML = `<img src="${c.thumbnail}" style="width:100%; height:120px; object-fit:cover;"><div style="padding:12px; font-size:12px; text-align:center;">${c.name}</div>`;
+                    div.onclick = () => {
+                        selectedCase = c;
+                        modal.style.display = 'none';
+                        mainImage.src = c.thumbnail;
+                        mainImage.style.display = 'block';
+                        mainImage.style.objectFit = 'contain';
+                        log(`Selected case: ${c.name}`, 'info');
+                        document.getElementById('step1Btn').disabled = false;
+                        document.getElementById('step1Btn').classList.add('active');
+                        detectionLayer.innerHTML = '';
+                        ['panel1','panel2','panel3'].forEach(id => document.getElementById(id).style.display = 'none');
+                    };
+                    list.appendChild(div);
+                });
+            } catch (e) { log("Failed to load cases", "warn"); }
+        }
+
+        function runStep1() {
+            log("Identifying building structure and scale...", 'info');
+            document.getElementById('panel1').style.display = 'block';
+            document.getElementById('valStructure').innerText = selectedCase.step1_info.structure;
+            document.getElementById('valYear').innerText = selectedCase.step1_info.year;
+            document.getElementById('valUse').innerText = selectedCase.step1_info.use;
+            log("Appearance recognition complete.", 'success');
+            log("Matching drawing database...", 'info');
+            setTimeout(() => {
+                log("Database match found. Proceed to semantic recognition.", 'success');
+                document.getElementById('step2Btn').disabled = false;
+                document.getElementById('step2Btn').classList.add('active');
+            }, 1000);
+        }
+
+        async function runStep2() {
+            log("Applying perspective rectification...", 'info');
+            mainImage.style.opacity = '0';
+            setTimeout(async () => {
+                mainImage.src = `${API_URL}/static/demo_data/${selectedCase.id}_ortho.jpg`;
+                mainImage.style.objectFit = 'fill';
+                mainImage.style.opacity = '1';
+                log("Geometric distortion corrected.", 'success');
+                log("Executing Semantic Parsing...", 'info');
+                const formData = new FormData();
+                formData.append('case_id', selectedCase.id);
+                try {
+                    const res = await fetch(`${API_URL}/analyze_demo`, { method: 'POST', body: formData });
+                    const data = await res.json();
+                    document.getElementById('panel2').style.display = 'block';
+                    document.getElementById('countWindow').innerText = data.counts.window;
+                    document.getElementById('countAC').innerText = data.counts.ac;
+                    document.getElementById('countOther').innerText = data.counts.door;
+                    renderDetections(data.debug.raw_boxes, data.debug.image_dims);
+                    log(`Detected ${data.debug.boxes_count} components.`, 'success');
+                    document.getElementById('step3Btn').disabled = false;
+                    document.getElementById('step3Btn').classList.add('active');
+                } catch (e) { log("Analysis failed", "warn"); }
+            }, 600);
+        }
+
+        function runStep3() {
+            log("Analyzing facade geometry...", 'info');
+            const windows = Array.from(detectionLayer.querySelectorAll('div')).filter(el => el.innerText.includes('window'));
+            const cols = {};
+            windows.forEach(win => {
+                const x = parseInt(win.style.left);
+                const matchedX = Object.keys(cols).find(cx => Math.abs(parseInt(cx) - x) < 30);
+                if (matchedX) cols[matchedX].push(win); else cols[x] = [win];
+            });
+            Object.values(cols).forEach(col => {
+                if (col.length < 2) return;
+                const sorted = col.sort((a, b) => parseInt(a.style.top) - parseInt(b.style.top));
+                const first = sorted[0], last = sorted[sorted.length-1];
+                const line = document.createElement('div');
+                line.style.cssText = `position:absolute; left:${parseInt(first.style.left) + parseInt(first.style.width)/2}px; top:${first.style.top}; width:0; height:${parseInt(last.style.top) - parseInt(first.style.top) + parseInt(last.style.height)}px; border-left:1px dashed rgba(255,255,255,0.5); pointer-events:none; z-index:5;`;
+                detectionLayer.appendChild(line);
+            });
+            document.getElementById('panel3').style.display = 'block';
+            document.getElementById('valBays').innerText = selectedCase.step3_info.bays;
+            document.getElementById('valSymmetry').innerText = selectedCase.step3_info.symmetry;
+            document.getElementById('valKitchen').innerText = selectedCase.step3_info.kitchen_est;
+            document.getElementById('valBedroom').innerText = selectedCase.step3_info.bedroom_est;
+            log("Spatial structure analyzed.", 'success');
+            document.getElementById('step4Btn').disabled = false;
+            document.getElementById('step4Btn').classList.add('active');
+        }
+
+        function runStep4() {
+            log("Generating interior floor plan...", 'info');
+            document.getElementById('viewportMain').innerHTML = `<iframe src="/static/floor_plan.html" style="width:100%; height:100%; border:none; background:white;"></iframe>`;
+            log("Plan generation complete.", 'success');
+        }
+
+        function renderDetections(boxes, dims) {
+            detectionLayer.innerHTML = '';
+            const rect = detectionLayer.getBoundingClientRect();
+            const scaleX = rect.width / dims[0], scaleY = rect.height / dims[1];
+            boxes.forEach(box => {
+                const [label, x, y, w, h] = box;
+                const div = document.createElement('div');
+                div.style.cssText = `position:absolute; left:${x*scaleX}px; top:${y*scaleY}px; width:${w*scaleX}px; height:${h*scaleY}px; border:1px solid ${label === 'window' ? '#f472b6' : '#fbbf24'}; background:rgba(${label === 'window' ? '244,114,182' : '251,191,36'}, 0.15);`;
+                const s = document.createElement('span');
+                s.innerText = label; s.style.cssText = `position:absolute; top:-12px; left:0; font-size:9px; color:white; background:${label === 'window' ? '#f472b6' : '#fbbf24'}; padding:0 3px; border-radius:2px;`;
+                div.appendChild(s); detectionLayer.appendChild(div);
+            });
+        }
+
+        function log(msg, type='info') {
+            const container = document.getElementById('logContainer');
+            const entry = document.createElement('div'); entry.className = `log-entry log-msg ${type}`;
+            entry.innerHTML = `[${new Date().toLocaleTimeString()}] ${msg}`;
+            container.appendChild(entry); container.scrollTop = container.scrollHeight;
+        }
+    </script>
+</body>
+</html>

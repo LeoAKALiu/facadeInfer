@@ -1,7 +1,7 @@
-# Ignore root level and external large data
+# Ignore root level development scripts
 data/
 outputs/
-backend/uploads/
+uploads/
 .env
 .sisyphus/
 facade_rectification.py
@@ -13,9 +13,7 @@ verify_ai.py
 test_pipeline.py
 debug_viz.py
 get_labels.py
+.DS_Store
 
-# Keep ONLY the essential static assets
-# Vercel by default includes everything not ignored
-# Let's ensure static files aren't accidentally filtered by extension
-# backend/static/*.dxf
-# backend/static/processed_*
+# Static assets are included by default
+# Ensure no accidental overrides
