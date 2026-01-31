@@ -27,3 +27,4 @@ backend/static/processed_*
 *.dxf
 *.json
 !RiskReport.json
+!public/demo_data/*.json
