@@ -44,7 +44,7 @@ async def get_cases():
         {
             "id": "IMG_1397",
             "name": "Commercial Office A",
-            "thumbnail": "/static/demo_data/IMG_1397.JPG",
+            "thumbnail": "/demo_data/IMG_1397.JPG",
             "step1_info": {
                 "structure": "RC Frame",
                 "year": "1995-2005",
@@ -61,7 +61,7 @@ async def get_cases():
         {
             "id": "IMG_1398",
             "name": "Residential Tower B",
-            "thumbnail": "/static/demo_data/IMG_1398.JPG",
+            "thumbnail": "/demo_data/IMG_1398.JPG",
             "step1_info": {
                 "structure": "Shear Wall",
                 "year": "2010-2020",
@@ -78,7 +78,7 @@ async def get_cases():
         {
             "id": "IMG_1399",
             "name": "Facade Case C",
-            "thumbnail": "/static/demo_data/IMG_1399.JPG",
+            "thumbnail": "/demo_data/IMG_1399.JPG",
             "step1_info": {
                 "structure": "Masonry-Concrete Mix",
                 "year": "1980s",

@@ -292,7 +292,7 @@
             log("Applying perspective rectification...", 'info');
             mainImage.style.opacity = '0';
             setTimeout(async () => {
-                mainImage.src = `${API_URL}/static/demo_data/${selectedCase.id}_ortho.jpg`;
+                mainImage.src = `${API_URL}/demo_data/${selectedCase.id}_ortho.jpg`;
                 mainImage.style.objectFit = 'fill';
                 mainImage.style.opacity = '1';
                 log("Geometric distortion corrected.", 'success');
