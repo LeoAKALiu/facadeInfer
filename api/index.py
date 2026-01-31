@@ -40,6 +40,8 @@ image_processor = ImageProcessor(upload_dir="/tmp", static_dir=static_abs_path)
 semantic_analyzer = SemanticAnalyzer()
 layout_generator = LayoutGenerator()
 
+DEFAULT_DEMO_PUBLIC_ASSET_BASE_URL = "https://facade-demo.oss-cn-beijing.aliyuncs.com/demo"
+
 def _get_demo_asset_base_url() -> str | None:
     """Return the configured absolute demo asset base URL, if any.
 
@@ -59,6 +61,10 @@ def _get_demo_public_asset_base_url() -> str | None:
     public_url = os.getenv("DEMO_PUBLIC_ASSET_BASE_URL", "").strip()
     if public_url:
         return public_url.rstrip("/")
+    # Safety net: if running on Vercel and env vars are not injected as expected,
+    # fall back to the known OSS public base used by this project.
+    if os.getenv("VERCEL") or os.getenv("VERCEL_ENV"):
+        return DEFAULT_DEMO_PUBLIC_ASSET_BASE_URL
     # Fall back to DEMO_ASSET_BASE_URL if user made everything public.
     return _get_demo_asset_base_url()
 
@@ -95,7 +101,8 @@ def demo_thumbnail_url(case_id: str) -> str:
     if not base_url:
         return url
     # On OSS, use on-the-fly image processing to reduce payload.
-    return f"{url}?x-oss-process=image/resize,w_600/quality,Q_75/format,webp"
+    # Avoid format conversion for compatibility with bucket policies.
+    return f"{url}?x-oss-process=image/resize,w_600/quality,Q_75"
 
 
 def demo_ortho_preview_url(case_id: str) -> str:
@@ -106,7 +113,7 @@ def demo_ortho_preview_url(case_id: str) -> str:
         return url
     # Keep enough resolution for the viewport while reducing transfer size.
     # If OSS image processing is disabled, OSS will just return the original.
-    return f"{url}?x-oss-process=image/resize,w_1800/quality,Q_80/format,webp"
+    return f"{url}?x-oss-process=image/resize,w_1800/quality,Q_80"
 
 def demo_floorplan_svg_base_url() -> str | None:
     """Return the base URL for the floorplan SVG layers, if configured.
