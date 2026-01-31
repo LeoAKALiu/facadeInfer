@@ -88,6 +88,16 @@ def demo_ortho_preview_url(case_id: str) -> str:
     # Keep enough resolution for the viewport while reducing transfer size.
     return f"{url}?x-oss-process=image/resize,w_1800/quality,Q_80/format,webp"
 
+def demo_floorplan_svg_base_url() -> str | None:
+    """Return the base URL for the floorplan SVG layers, if configured.
+
+    The user stores room SVGs under `<DEMO_ASSET_BASE_URL>/Untitled/`.
+    """
+    base_url = _get_demo_asset_base_url()
+    if not base_url:
+        return None
+    return f"{base_url}/Untitled"
+
 
 @app.get("/")
 async def root() -> Response:
@@ -111,6 +121,7 @@ async def get_cases() -> list[dict[str, Any]]:
         {
             "id": "BUILDING_001",
             "name": "Demo Building",
+            "floorplan_svg_base_url": demo_floorplan_svg_base_url(),
             "facades": [
                 {
                     "id": "IMG_1397",

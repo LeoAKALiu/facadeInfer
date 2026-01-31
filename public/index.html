@@ -487,7 +487,7 @@
                             const facadeId = btn.getAttribute('data-facade-id');
                             const facade = (b.facades || []).find(x => x.id === facadeId);
                             if (!facade) return;
-                            selectedCase = { ...facade, name: b.name, step1_info: b.step1_info, step3_info: b.step3_info };
+                            selectedCase = { ...facade, name: b.name, step1_info: b.step1_info, step3_info: b.step3_info, floorplan_svg_base_url: b.floorplan_svg_base_url };
                             modal.style.display = 'none';
                             fadeInMainImage(selectedCase.original_image || selectedCase.thumbnail, 'contain');
                             log(`Selected building: ${b.name} (${selectedCase.label || selectedCase.id})`, 'info');
@@ -664,6 +664,7 @@
 
             // Resolve relative URLs against /floor_plan.html.
             const baseUrl = new URL('/floor_plan.html', location.origin);
+            const ossFloorplanBase = (selectedCase && selectedCase.floorplan_svg_base_url) ? String(selectedCase.floorplan_svg_base_url).replace(/\/+$/, '') : '';
 
             for (const img of roomImgs) {
                 const classList = Array.from(img.classList);
@@ -671,6 +672,8 @@
                 const src = img.getAttribute('src') || '';
                 const alt = img.getAttribute('alt') || roomClass || 'room';
                 const abs = new URL(src, baseUrl).toString();
+                const fileName = (src.split('/').pop() || '').trim();
+                const ossAbs = (ossFloorplanBase && fileName) ? `${ossFloorplanBase}/${fileName}` : '';
 
                 // Container for this layer (positioned by the original CSS).
                 const layer = document.createElement('div');
@@ -678,7 +681,10 @@
 
                 // Try to inline the SVG content; if missing, fall back to a placeholder.
                 try {
-                    const svgRes = await fetch(abs, { cache: 'no-cache' });
+                    let svgRes = await fetch(abs, { cache: 'no-cache' });
+                    if (!svgRes.ok && ossAbs) {
+                        svgRes = await fetch(ossAbs, { cache: 'no-cache' });
+                    }
                     if (svgRes.ok) {
                         const svgText = await svgRes.text();
                         // Wrap the SVG to ensure it scales to the positioned box.

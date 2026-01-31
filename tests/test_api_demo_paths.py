@@ -41,6 +41,7 @@ def test_cases_thumbnails_use_configured_asset_base_url(monkeypatch: MonkeyPatch
     assert buildings, "Expected at least one demo building"
 
     for building in buildings:
+        assert building["floorplan_svg_base_url"] == "https://facade-demo.oss-cn-beijing.aliyuncs.com/demo/Untitled"
         for facade in building["facades"]:
             assert facade["thumbnail"].startswith("https://facade-demo.oss-cn-beijing.aliyuncs.com/demo/")
             assert facade["ortho_image"].startswith("https://facade-demo.oss-cn-beijing.aliyuncs.com/demo/")
