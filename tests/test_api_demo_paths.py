@@ -28,6 +28,16 @@ def test_cases_thumbnails_use_demo_data_prefix() -> None:
         assert case["thumbnail"].startswith("/demo_data/")
 
 
+def test_root_serves_html() -> None:
+    """The root path `/` should serve the dashboard HTML (not a JSON 404)."""
+    client = TestClient(index.app)
+
+    resp = client.get("/")
+    assert resp.status_code == 200
+    assert "text/html" in resp.headers.get("content-type", "")
+    assert "<!DOCTYPE html>" in resp.text
+
+
 def test_analyze_demo_images_use_demo_data_prefix(tmp_path: Path, monkeypatch: MonkeyPatch) -> None:
     """The `/analyze_demo` endpoint should return `/demo_data/` image URLs."""
     # Create a minimal demo_data directory in a temp "public" root.

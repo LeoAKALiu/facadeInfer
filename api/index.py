@@ -40,6 +40,15 @@ semantic_analyzer = SemanticAnalyzer()
 layout_generator = LayoutGenerator()
 
 
+@app.get("/")
+async def root() -> FileResponse:
+    """Serve the dashboard HTML page."""
+    index_path = os.path.join(static_abs_path, "index.html")
+    if not os.path.exists(index_path):
+        raise HTTPException(status_code=404, detail="index.html not found")
+    return FileResponse(index_path)
+
+
 @app.get("/cases")
 async def get_cases() -> list[dict[str, Any]]:
     """Return the curated demo cases shown in the UI."""
