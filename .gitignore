@@ -13,9 +13,17 @@ dist/
 build/
 *.egg-info/
 .DS_Store
+
+# Data and environment
 data/
 .env
 
+# Project specific
 backend/uploads/
 backend/static/*.dxf
 backend/static/processed_*
+
+# From remote
+*.dxf
+*.json
+!RiskReport.json

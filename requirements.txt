@@ -5,3 +5,9 @@ ezdxf
 numpy
 Pillow
 python-dotenv
+opencv-python-headless
+ultralytics
+pandas
+pytest
+httpx
+jinja2

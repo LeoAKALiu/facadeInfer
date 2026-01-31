@@ -1,0 +1,797 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Architectural AI Reverse Engineering Dashboard</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/remixicon/4.6.0/remixicon.min.css" rel="stylesheet">
+    <style>
+        :root {
+            --bg-background: #09090b;
+            --bg-card: #18181b;
+            --bg-muted: #27272a;
+            --text-primary: #fafafa;
+            --text-secondary: #a1a1aa;
+            --text-muted: #71717a;
+            --accent-primary: #3b82f6; /* Blue for tech */
+            --accent-success: #10b981;
+            --border-color: #27272a;
+            --grid-color: rgba(255, 255, 255, 0.05);
+        }
+
+        @font-face {
+            font-family: 'Inter';
+            src: url('https://assets-persist.lovart.ai/agent-static-assets/NotoSansHans-Regular.otf');
+        }
+
+        @font-face {
+            font-family: 'Inter-Medium';
+            src: url('https://assets-persist.lovart.ai/agent-static-assets/NotoSansHans-Medium.otf');
+        }
+
+        @font-face {
+            font-family: 'Inter-Bold';
+            src: url('https://assets-persist.lovart.ai/agent-static-assets/NotoSansHans-Bold.otf');
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            background-color: var(--bg-background);
+            color: var(--text-primary);
+            font-family: 'Inter', sans-serif;
+            width: 1920px;
+            height: 1080px; /* Fixed height for dashboard feel */
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Header */
+        header {
+            height: 64px;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 24px;
+            background-color: var(--bg-background);
+        }
+
+        .header-left {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .logo-icon {
+            width: 32px;
+            height: 32px;
+            background: linear-gradient(135deg, var(--accent-primary), #60a5fa);
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 18px;
+        }
+
+        .header-title {
+            font-family: 'Inter-Bold';
+            font-size: 18px;
+            letter-spacing: -0.025em;
+        }
+
+        .header-tag {
+            font-size: 12px;
+            background: var(--bg-muted);
+            padding: 4px 8px;
+            border-radius: 4px;
+            color: var(--text-secondary);
+            font-family: 'Inter-Medium';
+        }
+
+        .header-right {
+            display: flex;
+            gap: 12px;
+        }
+
+        .btn {
+            height: 36px;
+            padding: 0 16px;
+            border-radius: 6px;
+            font-size: 14px;
+            font-family: 'Inter-Medium';
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            cursor: pointer;
+            transition: all 0.2s;
+            border: 1px solid transparent;
+        }
+
+        .btn-outline {
+            background: transparent;
+            border-color: var(--border-color);
+            color: var(--text-primary);
+        }
+
+        .btn-outline:hover {
+            background: var(--bg-muted);
+        }
+
+        .btn-primary {
+            background: var(--text-primary);
+            color: var(--bg-background);
+        }
+
+        .btn-primary:hover {
+            opacity: 0.9;
+        }
+
+        /* Main Layout */
+        .main-container {
+            display: flex;
+            flex: 1;
+            height: calc(1080px - 64px);
+        }
+
+        /* Sidebar Stepper */
+        .sidebar {
+            width: 320px;
+            border-right: 1px solid var(--border-color);
+            padding: 32px 24px;
+            background-color: var(--bg-background);
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .step-item {
+            position: relative;
+            padding: 16px;
+            border-radius: 8px;
+            cursor: pointer;
+            border: 1px solid transparent;
+            transition: all 0.2s;
+            display: flex;
+            gap: 16px;
+        }
+
+        .step-item::before {
+            content: '';
+            position: absolute;
+            left: 27px; /* Center of the circle */
+            top: 48px;
+            bottom: -24px;
+            width: 2px;
+            background-color: var(--border-color);
+            z-index: 0;
+        }
+
+        .step-item:last-child::before {
+            display: none;
+        }
+
+        .step-item:hover {
+            background-color: var(--bg-muted);
+        }
+
+        .step-item.active {
+            background-color: var(--bg-card);
+            border-color: var(--border-color);
+        }
+
+        .step-indicator {
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            background-color: var(--bg-muted);
+            border: 2px solid var(--border-color);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            font-family: 'Inter-Bold';
+            color: var(--text-muted);
+            z-index: 1;
+            flex-shrink: 0;
+            margin-top: 2px;
+            transition: all 0.3s;
+        }
+
+        .step-item.active .step-indicator {
+            background-color: var(--accent-primary);
+            border-color: var(--accent-primary);
+            color: white;
+            box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.2);
+        }
+        
+        .step-item.completed .step-indicator {
+            background-color: var(--accent-success);
+            border-color: var(--accent-success);
+            color: white;
+        }
+
+        .step-content {
+            flex: 1;
+        }
+
+        .step-title {
+            font-size: 14px;
+            font-family: 'Inter-Medium';
+            color: var(--text-secondary);
+            margin-bottom: 4px;
+        }
+
+        .step-item.active .step-title {
+            color: var(--text-primary);
+            font-family: 'Inter-Bold';
+        }
+
+        .step-desc {
+            font-size: 12px;
+            color: var(--text-muted);
+        }
+
+        /* Center Canvas */
+        .canvas-area {
+            flex: 1;
+            background-color: #000;
+            background-image: 
+                linear-gradient(var(--grid-color) 1px, transparent 1px),
+                linear-gradient(90deg, var(--grid-color) 1px, transparent 1px);
+            background-size: 40px 40px;
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+        }
+
+        .canvas-controls {
+            position: absolute;
+            bottom: 24px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            padding: 8px;
+            border-radius: 8px;
+            display: flex;
+            gap: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+        }
+
+        .control-btn {
+            width: 32px;
+            height: 32px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 4px;
+            color: var(--text-secondary);
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .control-btn:hover {
+            background: var(--bg-muted);
+            color: var(--text-primary);
+        }
+
+        .viewport-card {
+            width: 800px;
+            height: 600px;
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.5);
+            position: relative;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .viewport-header {
+            height: 40px;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            align-items: center;
+            padding: 0 16px;
+            justify-content: space-between;
+            background: var(--bg-muted);
+        }
+
+        .viewport-title {
+            font-size: 12px;
+            color: var(--text-secondary);
+            font-family: 'Inter-Medium';
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .status-dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background-color: var(--accent-success);
+        }
+        
+        .viewport-content {
+            flex: 1;
+            position: relative;
+            background: #111;
+        }
+
+        /* Mock Visualization inside Viewport */
+        .vis-layer {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .vis-image {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            opacity: 0.4;
+            filter: grayscale(100%);
+        }
+
+        .vis-overlay {
+            position: absolute;
+            top: 20%;
+            left: 20%;
+            width: 60%;
+            height: 60%;
+            border: 2px dashed var(--accent-primary);
+            background: rgba(59, 130, 246, 0.1);
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            grid-template-rows: repeat(2, 1fr);
+            gap: 4px;
+        }
+        
+        .grid-cell {
+            border: 1px solid rgba(59, 130, 246, 0.3);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 10px;
+            color: var(--accent-primary);
+            position: relative;
+        }
+        
+        .grid-cell::after {
+            content: '';
+            position: absolute;
+            top: 2px;
+            right: 2px;
+            width: 4px;
+            height: 4px;
+            background: var(--accent-primary);
+            border-radius: 50%;
+        }
+
+        /* Right Panel */
+        .data-panel {
+            width: 400px;
+            border-left: 1px solid var(--border-color);
+            background-color: var(--bg-background);
+            padding: 24px;
+            display: flex;
+            flex-direction: column;
+            gap: 24px;
+            overflow-y: auto;
+        }
+
+        .panel-section-title {
+            font-size: 14px;
+            font-family: 'Inter-Bold';
+            color: var(--text-primary);
+            margin-bottom: 12px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .data-card {
+            background-color: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 16px;
+        }
+
+        .metric-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+            margin-bottom: 8px;
+        }
+
+        .metric-label {
+            font-size: 12px;
+            color: var(--text-muted);
+        }
+
+        .metric-value {
+            font-size: 20px;
+            font-family: 'Inter-Bold';
+            color: var(--text-primary);
+        }
+
+        .metric-sub {
+            font-size: 12px;
+            color: var(--accent-success);
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+        
+        .progress-bar {
+            height: 4px;
+            background: var(--bg-muted);
+            border-radius: 2px;
+            margin-top: 8px;
+            overflow: hidden;
+        }
+        
+        .progress-fill {
+            height: 100%;
+            background: var(--accent-primary);
+            border-radius: 2px;
+        }
+
+        .log-container {
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 12px;
+            color: var(--text-secondary);
+            background: #111;
+            padding: 12px;
+            border-radius: 6px;
+            height: 150px;
+            overflow-y: auto;
+            border: 1px solid var(--border-color);
+        }
+
+        .log-entry {
+            margin-bottom: 4px;
+            display: flex;
+            gap: 8px;
+        }
+
+        .log-time {
+            color: var(--text-muted);
+        }
+        
+        .log-msg.info { color: #60a5fa; }
+        .log-msg.success { color: #34d399; }
+        .log-msg.warn { color: #fbbf24; }
+
+        .property-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+        }
+
+        .prop-item {
+            background: var(--bg-muted);
+            padding: 12px;
+            border-radius: 6px;
+        }
+        
+        .prop-label {
+            font-size: 11px;
+            color: var(--text-muted);
+            margin-bottom: 4px;
+        }
+        
+        .prop-val {
+            font-size: 14px;
+            font-family: 'Inter-Medium';
+            color: var(--text-primary);
+        }
+
+        /* Animations */
+        @keyframes scan {
+            0% { top: 0; opacity: 0; }
+            10% { opacity: 1; }
+            90% { opacity: 1; }
+            100% { top: 100%; opacity: 0; }
+        }
+
+        .scan-line {
+            position: absolute;
+            left: 0;
+            width: 100%;
+            height: 2px;
+            background: var(--accent-primary);
+            box-shadow: 0 0 10px var(--accent-primary);
+            animation: scan 3s linear infinite;
+            z-index: 10;
+            opacity: 0.7;
+        }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: var(--bg-background);
+        }
+        ::-webkit-scrollbar-thumb {
+            background: var(--bg-muted);
+            border-radius: 3px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: var(--text-muted);
+        }
+
+    </style>
+</head>
+<body>
+
+    <header>
+        <div class="header-left">
+            <div class="logo-icon"><i class="ri-building-2-line"></i></div>
+            <div class="header-title">StructAI <span style="font-weight: 400; color: var(--text-muted);">Reverse Engine</span></div>
+            <div class="header-tag">v2.4.0-beta</div>
+        </div>
+        <div class="header-right">
+            <div class="btn btn-outline">
+                <i class="ri-file-upload-line"></i>
+                Import JSON
+            </div>
+            <div class="btn btn-outline">
+                <i class="ri-settings-4-line"></i>
+                Settings
+            </div>
+            <div class="btn btn-primary">
+                <i class="ri-play-fill"></i>
+                Run Analysis
+            </div>
+        </div>
+    </header>
+
+    <div class="main-container">
+        <!-- Left Sidebar: Stepper -->
+        <div class="sidebar">
+            <div class="step-item completed">
+                <div class="step-indicator"><i class="ri-check-line"></i></div>
+                <div class="step-content">
+                    <div class="step-title">Raw Perception</div>
+                    <div class="step-desc">Input image processing & noise reduction</div>
+                </div>
+            </div>
+            <div class="step-item completed">
+                <div class="step-indicator"><i class="ri-check-line"></i></div>
+                <div class="step-content">
+                    <div class="step-title">Semantic Parsing</div>
+                    <div class="step-desc">Segmentation of walls, windows, doors</div>
+                </div>
+            </div>
+            <div class="step-item active">
+                <div class="step-indicator">3</div>
+                <div class="step-content">
+                    <div class="step-title">Rectification</div>
+                    <div class="step-desc">Geometric correction & Normalization</div>
+                </div>
+            </div>
+            <div class="step-item">
+                <div class="step-indicator">4</div>
+                <div class="step-content">
+                    <div class="step-title">Prior Injection</div>
+                    <div class="step-desc">Applying architectural grammar rules</div>
+                </div>
+            </div>
+            <div class="step-item">
+                <div class="step-indicator">5</div>
+                <div class="step-content">
+                    <div class="step-title">Generation & Eval</div>
+                    <div class="step-desc">Final layout generation & scoring</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Middle: Canvas -->
+        <div class="canvas-area">
+            <div class="viewport-card">
+                <div class="viewport-header">
+                    <div class="viewport-title">
+                        <span class="status-dot"></span>
+                        VIEWPORT 1: ORTHOGRAPHIC PROJECTION
+                    </div>
+                    <div class="viewport-title" style="gap:12px;">
+                        <span><i class="ri-ruler-line"></i> Scale: 1:100</span>
+                        <span><i class="ri-focus-3-line"></i> 1920x1080px</span>
+                    </div>
+                </div>
+                <div class="viewport-content">
+                    <!-- Background Reference Image -->
+                    <div class="vis-layer">
+                         <!-- Abstract building shape using css shapes for demo purposes since no image provided -->
+                         <div style="width: 60%; height: 70%; background: #222; position: relative; clip-path: polygon(20% 0%, 80% 0%, 100% 100%, 0% 100%); display: flex; align-items: flex-end; justify-content: center;">
+                            <div style="width: 100%; height: 100%; background: linear-gradient(0deg, rgba(255,255,255,0.05) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.05) 1px, transparent 1px); background-size: 20px 20px;"></div>
+                         </div>
+                    </div>
+                    
+                    <!-- Overlay Grid representing Rectification -->
+                    <div class="vis-layer">
+                        <div class="vis-overlay">
+                            <div class="scan-line"></div>
+                            <!-- Grid Cells -->
+                            <div class="grid-cell">R-01</div> <div class="grid-cell">R-02</div> <div class="grid-cell">R-03</div>
+                            <div class="grid-cell">R-04</div> <div class="grid-cell">R-05</div> <div class="grid-cell">R-06</div>
+                        </div>
+                    </div>
+
+                    <!-- HUD Elements -->
+                    <div style="position: absolute; top: 16px; left: 16px; background: rgba(0,0,0,0.6); padding: 8px 12px; border-radius: 4px; border: 1px solid var(--border-color);">
+                        <div style="font-size: 12px; color: var(--accent-primary); font-family: 'Inter-Bold';">TRANSFORM MATRIX</div>
+                        <div style="font-size: 10px; color: var(--text-secondary); margin-top: 4px; font-family: monospace;">
+                            [ 0.98, 0.02, 12.4 ]<br>
+                            [ -0.01, 0.99, 4.20 ]<br>
+                            [ 0.00, 0.00, 1.00 ]
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+
+            <div class="canvas-controls">
+                <div class="control-btn"><i class="ri-zoom-in-line"></i></div>
+                <div class="control-btn"><i class="ri-zoom-out-line"></i></div>
+                <div class="control-btn"><i class="ri-hand-line"></i></div>
+                <div class="control-btn" style="border-left: 1px solid var(--border-color); margin-left: 4px; padding-left: 12px;"><i class="ri-fullscreen-line"></i></div>
+            </div>
+        </div>
+
+        <!-- Right: Data Panel -->
+        <div class="data-panel">
+            
+            <!-- Section 1: Key Metrics -->
+            <div>
+                <div class="panel-section-title">
+                    Analysis Metrics
+                    <i class="ri-bar-chart-box-line" style="color: var(--text-muted)"></i>
+                </div>
+                <div class="data-card">
+                    <div class="metric-row">
+                        <span class="metric-label">Rectification Confidence</span>
+                        <span class="metric-value">94.2%</span>
+                    </div>
+                    <div class="progress-bar">
+                        <div class="progress-fill" style="width: 94.2%"></div>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; margin-top: 16px;">
+                        <div>
+                            <div class="metric-label">Perspective Loss</div>
+                            <div class="metric-val" style="font-family: 'Inter-Bold'; font-size: 16px;">0.042</div>
+                        </div>
+                        <div>
+                            <div class="metric-label">IoU Score</div>
+                            <div class="metric-val" style="font-family: 'Inter-Bold'; font-size: 16px;">0.89</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Section 2: Properties -->
+            <div>
+                <div class="panel-section-title">
+                    Geometric Properties
+                    <i class="ri-shape-line" style="color: var(--text-muted)"></i>
+                </div>
+                <div class="property-grid">
+                    <div class="prop-item">
+                        <div class="prop-label">Vanishing Pt X</div>
+                        <div class="prop-val">1024.5 px</div>
+                    </div>
+                    <div class="prop-item">
+                        <div class="prop-label">Vanishing Pt Y</div>
+                        <div class="prop-val">540.2 px</div>
+                    </div>
+                    <div class="prop-item">
+                        <div class="prop-label">Aspect Ratio</div>
+                        <div class="prop-val">1.618</div>
+                    </div>
+                    <div class="prop-item">
+                        <div class="prop-label">Skew Angle</div>
+                        <div class="prop-val">2.4°</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Section 3: Detected Elements -->
+            <div>
+                <div class="panel-section-title">
+                    Detected Elements
+                    <span style="font-size: 10px; background: var(--bg-muted); padding: 2px 6px; border-radius: 4px;">12 Items</span>
+                </div>
+                <div class="data-card" style="padding: 0;">
+                   <table style="width: 100%; border-collapse: collapse; font-size: 12px;">
+                       <thead style="background: var(--bg-muted); text-align: left;">
+                           <tr>
+                               <th style="padding: 8px 12px; font-weight: normal; color: var(--text-muted);">Type</th>
+                               <th style="padding: 8px 12px; font-weight: normal; color: var(--text-muted);">Conf.</th>
+                               <th style="padding: 8px 12px; font-weight: normal; color: var(--text-muted);">Area</th>
+                           </tr>
+                       </thead>
+                       <tbody>
+                           <tr style="border-bottom: 1px solid var(--border-color);">
+                               <td style="padding: 8px 12px; color: var(--accent-primary);">Wall_Ext</td>
+                               <td style="padding: 8px 12px;">98%</td>
+                               <td style="padding: 8px 12px;">42m²</td>
+                           </tr>
+                           <tr style="border-bottom: 1px solid var(--border-color);">
+                               <td style="padding: 8px 12px; color: #f472b6;">Window_01</td>
+                               <td style="padding: 8px 12px;">92%</td>
+                               <td style="padding: 8px 12px;">2.4m²</td>
+                           </tr>
+                           <tr style="border-bottom: 1px solid var(--border-color);">
+                               <td style="padding: 8px 12px; color: #f472b6;">Window_02</td>
+                               <td style="padding: 8px 12px;">91%</td>
+                               <td style="padding: 8px 12px;">2.4m²</td>
+                           </tr>
+                           <tr>
+                               <td style="padding: 8px 12px; color: #fbbf24;">Door_Main</td>
+                               <td style="padding: 8px 12px;">95%</td>
+                               <td style="padding: 8px 12px;">3.1m²</td>
+                           </tr>
+                       </tbody>
+                   </table>
+                </div>
+            </div>
+
+            <!-- Section 4: Logs -->
+            <div style="margin-top: auto;">
+                <div class="panel-section-title">
+                    System Output
+                    <i class="ri-terminal-box-line" style="color: var(--text-muted)"></i>
+                </div>
+                <div class="log-container">
+                    <div class="log-entry">
+                        <span class="log-time">[14:02:10]</span>
+                        <span class="log-msg info">Loading raw image data...</span>
+                    </div>
+                    <div class="log-entry">
+                        <span class="log-time">[14:02:11]</span>
+                        <span class="log-msg success">Image pre-processing complete.</span>
+                    </div>
+                    <div class="log-entry">
+                        <span class="log-time">[14:02:12]</span>
+                        <span class="log-msg info">Starting segmentation model...</span>
+                    </div>
+                    <div class="log-entry">
+                        <span class="log-time">[14:02:14]</span>
+                        <span class="log-msg success">12 elements identified.</span>
+                    </div>
+                    <div class="log-entry">
+                        <span class="log-time">[14:02:15]</span>
+                        <span class="log-msg info">Computing rectification matrix...</span>
+                    </div>
+                    <div class="log-entry">
+                        <span class="log-time">[14:02:16]</span>
+                        <span class="log-msg warn">Slight skew detected in Y-axis.</span>
+                    </div>
+                    <div class="log-entry">
+                        <span class="log-time">[14:02:17]</span>
+                        <span class="log-msg info">Applying perspective correction...</span>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+</body>
+</html>
