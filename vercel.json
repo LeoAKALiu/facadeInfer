@@ -1,3 +1,12 @@
-version https://git-lfs.github.com/spec/v1
-oid sha256:d2a3507a140aaf53e5b4537bbfd392687c39d14b0cda091f764ed8145752377c
-size 193
+{
+  "rewrites": [
+    {
+      "source": "/static/(.*)",
+      "destination": "/static/$1"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/api/index"
+    }
+  ]
+}
