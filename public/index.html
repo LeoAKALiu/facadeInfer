@@ -138,7 +138,7 @@
                 ● System Ready: Demo Mode
             </div>
             <button class="btn btn-primary" onclick="showCaseSelector()">
-                <i class="ri-folder-open-line"></i> Select Demo Case
+                <i class="ri-folder-open-line"></i> Select Building
             </button>
             <button class="btn btn-outline" onclick="location.reload()">
                 <i class="ri-refresh-line"></i> Reset
@@ -230,7 +230,7 @@
 
     <div id="caseSelectorModal">
         <div style="background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 12px; padding: 32px; width: 600px;">
-            <h2 style="margin-bottom: 24px;">Select Architectural Case</h2>
+            <h2 style="margin-bottom: 24px;">Select Building</h2>
             <div id="caseList" style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 24px;"></div>
             <div style="display: flex; justify-content: flex-end;">
                 <button class="btn btn-outline" onclick="document.getElementById('caseSelectorModal').style.display='none'">Cancel</button>
@@ -250,24 +250,49 @@
             modal.style.display = 'flex';
             try {
                 const res = await fetch(`${API_URL}/cases`);
-                const cases = await res.json();
+                const buildings = await res.json();
                 list.innerHTML = '';
-                cases.forEach(c => {
+                buildings.forEach(b => {
                     const div = document.createElement('div');
                     div.className = 'case-card';
-                    div.innerHTML = `<img src="${c.thumbnail}" loading="lazy" decoding="async" style="width:100%; height:120px; object-fit:cover;"><div style="padding:12px; font-size:12px; text-align:center;">${c.name}</div>`;
-                    div.onclick = () => {
-                        selectedCase = c;
-                        modal.style.display = 'none';
-                        mainImage.src = c.thumbnail;
-                        mainImage.style.display = 'block';
-                        mainImage.style.objectFit = 'contain';
-                        log(`Selected case: ${c.name}`, 'info');
-                        document.getElementById('step1Btn').disabled = false;
-                        document.getElementById('step1Btn').classList.add('active');
-                        detectionLayer.innerHTML = '';
-                        ['panel1','panel2','panel3'].forEach(id => document.getElementById(id).style.display = 'none');
-                    };
+                    const facadeThumbs = (b.facades || []).map(f => {
+                        return `
+                          <button type="button" class="facade-thumb" data-facade-id="${f.id}"
+                            style="background:none;border:none;padding:0;cursor:pointer;text-align:left;">
+                            <img src="${f.thumbnail}" loading="lazy" decoding="async"
+                              style="width:100%; height:120px; object-fit:cover; border:1px solid var(--border-color); border-radius:6px;">
+                            <div style="padding-top:8px; font-size:12px; color: var(--text-secondary); text-align:center;">${f.label || f.id}</div>
+                          </button>
+                        `;
+                    }).join('');
+
+                    div.innerHTML = `
+                      <div style="padding: 12px;">
+                        <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap: 12px;">
+                          ${facadeThumbs}
+                        </div>
+                        <div style="padding-top: 12px; font-size: 13px; text-align:center; font-weight: 600;">${b.name}</div>
+                      </div>
+                    `;
+
+                    div.querySelectorAll('.facade-thumb').forEach(btn => {
+                        btn.addEventListener('click', (e) => {
+                            e.preventDefault();
+                            const facadeId = btn.getAttribute('data-facade-id');
+                            const facade = (b.facades || []).find(x => x.id === facadeId);
+                            if (!facade) return;
+                            selectedCase = { ...facade, name: b.name, step1_info: b.step1_info, step3_info: b.step3_info };
+                            modal.style.display = 'none';
+                            mainImage.src = selectedCase.original_image || selectedCase.thumbnail;
+                            mainImage.style.display = 'block';
+                            mainImage.style.objectFit = 'contain';
+                            log(`Selected building: ${b.name} (${selectedCase.label || selectedCase.id})`, 'info');
+                            document.getElementById('step1Btn').disabled = false;
+                            document.getElementById('step1Btn').classList.add('active');
+                            detectionLayer.innerHTML = '';
+                            ['panel1','panel2','panel3'].forEach(id => document.getElementById(id).style.display = 'none');
+                        });
+                    });
                     list.appendChild(div);
                 });
             } catch (e) { log("Failed to load cases", "warn"); }

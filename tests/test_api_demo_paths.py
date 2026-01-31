@@ -20,12 +20,13 @@ def test_cases_thumbnails_use_demo_data_prefix() -> None:
     resp = client.get("/cases")
     assert resp.status_code == 200
 
-    cases = resp.json()
-    assert isinstance(cases, list)
-    assert cases, "Expected at least one demo case"
+    buildings = resp.json()
+    assert isinstance(buildings, list)
+    assert buildings, "Expected at least one demo building"
 
-    for case in cases:
-        assert case["thumbnail"].startswith("/demo_data/")
+    for building in buildings:
+        for facade in building["facades"]:
+            assert facade["thumbnail"].startswith("/demo_data/")
 
 
 def test_cases_thumbnails_use_configured_asset_base_url(monkeypatch: MonkeyPatch) -> None:
@@ -35,13 +36,14 @@ def test_cases_thumbnails_use_configured_asset_base_url(monkeypatch: MonkeyPatch
 
     resp = client.get("/cases")
     assert resp.status_code == 200
-    cases = resp.json()
-    assert isinstance(cases, list)
-    assert cases, "Expected at least one demo case"
+    buildings = resp.json()
+    assert isinstance(buildings, list)
+    assert buildings, "Expected at least one demo building"
 
-    for case in cases:
-        assert case["thumbnail"].startswith("https://facade-demo.oss-cn-beijing.aliyuncs.com/demo/")
-        assert case["ortho_image"].startswith("https://facade-demo.oss-cn-beijing.aliyuncs.com/demo/")
+    for building in buildings:
+        for facade in building["facades"]:
+            assert facade["thumbnail"].startswith("https://facade-demo.oss-cn-beijing.aliyuncs.com/demo/")
+            assert facade["ortho_image"].startswith("https://facade-demo.oss-cn-beijing.aliyuncs.com/demo/")
 
 
 def test_root_serves_html() -> None:

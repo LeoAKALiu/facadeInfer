@@ -109,11 +109,32 @@ async def get_cases() -> list[dict[str, Any]]:
     """Return the curated demo cases shown in the UI."""
     return [
         {
-            "id": "IMG_1397",
-            "name": "Commercial Office A",
-            "thumbnail": demo_thumbnail_url("IMG_1397"),
-            "ortho_image": demo_ortho_preview_url("IMG_1397"),
-            "original_image": demo_asset_url(_demo_original_filename("IMG_1397")),
+            "id": "BUILDING_001",
+            "name": "Demo Building",
+            "facades": [
+                {
+                    "id": "IMG_1397",
+                    "label": "北外立面",
+                    "thumbnail": demo_thumbnail_url("IMG_1397"),
+                    "ortho_image": demo_ortho_preview_url("IMG_1397"),
+                    "original_image": demo_asset_url(_demo_original_filename("IMG_1397")),
+                },
+                {
+                    "id": "IMG_1398",
+                    "label": "西外立面",
+                    "thumbnail": demo_thumbnail_url("IMG_1398"),
+                    "ortho_image": demo_ortho_preview_url("IMG_1398"),
+                    "original_image": demo_asset_url(_demo_original_filename("IMG_1398")),
+                },
+                {
+                    "id": "IMG_1399",
+                    "label": "南外立面",
+                    "thumbnail": demo_thumbnail_url("IMG_1399"),
+                    "ortho_image": demo_ortho_preview_url("IMG_1399"),
+                    "original_image": demo_asset_url(_demo_original_filename("IMG_1399")),
+                },
+            ],
+            # Shared building-level metadata used by subsequent steps.
             "step1_info": {
                 "structure": "RC Frame",
                 "year": "1995-2005",
@@ -126,45 +147,7 @@ async def get_cases() -> list[dict[str, Any]]:
                 "kitchen_est": "North side columns",
                 "bedroom_est": "South facing bays",
             },
-        },
-        {
-            "id": "IMG_1398",
-            "name": "Residential Tower B",
-            "thumbnail": demo_thumbnail_url("IMG_1398"),
-            "ortho_image": demo_ortho_preview_url("IMG_1398"),
-            "original_image": demo_asset_url(_demo_original_filename("IMG_1398")),
-            "step1_info": {
-                "structure": "Shear Wall",
-                "year": "2010-2020",
-                "use": "Residential",
-                "area_est": "5600 m²",
-            },
-            "step3_info": {
-                "bays": 8,
-                "symmetry": "Bilateral",
-                "kitchen_est": "Inner courtyard side",
-                "bedroom_est": "Main facade windows",
-            },
-        },
-        {
-            "id": "IMG_1399",
-            "name": "Facade Case C",
-            "thumbnail": demo_thumbnail_url("IMG_1399"),
-            "ortho_image": demo_ortho_preview_url("IMG_1399"),
-            "original_image": demo_asset_url(_demo_original_filename("IMG_1399")),
-            "step1_info": {
-                "structure": "Masonry-Concrete Mix",
-                "year": "1980s",
-                "use": "Residential/Old Town",
-                "area_est": "1200 m²",
-            },
-            "step3_info": {
-                "bays": 4,
-                "symmetry": "Low",
-                "kitchen_est": "Rear extensions",
-                "bedroom_est": "Street facing windows",
-            },
-        },
+        }
     ]
 
 
