@@ -2,11 +2,19 @@
   "rewrites": [
     {
       "source": "/static/(.*)",
-      "destination": "/static/$1"
+      "destination": "/$1"
     },
     {
-      "source": "/(.*)",
+      "source": "/cases",
       "destination": "/api/index.py"
+    },
+    {
+      "source": "/analyze_demo",
+      "destination": "/api/index.py"
+    },
+    {
+      "source": "/",
+      "destination": "/index.html"
     }
   ]
 }

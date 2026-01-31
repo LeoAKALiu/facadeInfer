@@ -1,7 +1,6 @@
 import os
 import sys
 import json
-import shutil
 import numpy as np
 from fastapi import FastAPI, UploadFile, File, HTTPException, Form
 from fastapi.staticfiles import StaticFiles
@@ -9,8 +8,8 @@ from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from PIL import Image
 
-# Add root dir to path (since this file is in api/)
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+# Path adjustment
+sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 
 from core.image_processor import ImageProcessor
 from core.semantic_analyzer import SemanticAnalyzer
@@ -27,36 +26,20 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Static Files - located in root/static/
-static_abs_path = os.path.abspath(
-    os.path.join(os.path.dirname(__file__), "..", "static")
-)
-app.mount("/static", StaticFiles(directory=static_abs_path), name="static")
+# Root of deployment
+BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+# Vercel public directory is served at root, so we look for files in 'public'
+# but the browser will see them at the root level (e.g. /index.html)
+static_abs_path = os.path.join(BASE_DIR, "public")
 
 # Initialize Processors
-UPLOAD_DIR = (
-    "/tmp"
-    if os.environ.get("VERCEL")
-    else os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "uploads"))
-)
-STATIC_DIR = static_abs_path
-
-if not os.environ.get("VERCEL") and not os.path.exists(UPLOAD_DIR):
-    os.makedirs(UPLOAD_DIR, exist_ok=True)
-
-image_processor = ImageProcessor(upload_dir=UPLOAD_DIR, static_dir=STATIC_DIR)
+image_processor = ImageProcessor(upload_dir="/tmp", static_dir=static_abs_path)
 semantic_analyzer = SemanticAnalyzer()
 layout_generator = LayoutGenerator()
 
 
-@app.get("/")
-async def root():
-    return FileResponse(os.path.join(static_abs_path, "index.html"))
-
-
 @app.get("/cases")
 async def get_cases():
-    # Hardcoded rich metadata for the 4-step demo
     return [
         {
             "id": "IMG_1397",
@@ -132,8 +115,7 @@ async def analyze_demo(case_id: str = Form(...)):
             pts = np.array(shape["points"])
             x_min, y_min = pts.min(axis=0)
             x_max, y_max = pts.max(axis=0)
-            w = x_max - x_min
-            h = y_max - y_min
+            w, h = x_max - x_min, y_max - y_min
             label = shape["label"]
             bounding_boxes.append([label, int(x_min), int(y_min), int(w), int(h)])
 
@@ -166,59 +148,4 @@ async def analyze_demo(case_id: str = Form(...)):
             },
         }
     except Exception as e:
-        import traceback
-
-        traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
-
-
-@app.post("/analyze")
-async def analyze_facade(file: UploadFile = File(...), corners: str = Form(None)):
-    try:
-        parsed_corners = None
-        if corners:
-            parsed_corners = json.loads(corners)
-
-        filename = file.filename
-        upload_path = os.path.join(image_processor.upload_dir, filename)
-        with open(upload_path, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
-
-        processed_path, bounding_boxes, image_dims = image_processor.process(
-            upload_path, corners=parsed_corners
-        )
-
-        # 3. Analyze Semantics (Risk Assessment)
-        risk_report = semantic_analyzer.analyze(bounding_boxes, image_dims)
-
-        # 4. Generate CAD Layout
-        dxf_filename = f"layout_{os.path.splitext(filename)[0]}.dxf"
-        dxf_path = os.path.join(image_processor.static_dir, dxf_filename)
-        layout_generator.generate_dxf(bounding_boxes, image_dims, dxf_path)
-
-        # 5. Construct Response
-        return {
-            "status": "success",
-            "risk_report": risk_report,
-            "images": {
-                "original": None,
-                "processed": f"/static/{os.path.basename(processed_path)}",
-            },
-            "cad": {"dxf_url": f"/static/{dxf_filename}"},
-            "debug": {
-                "boxes_count": len(bounding_boxes),
-                "image_dims": image_dims,
-                "raw_boxes": bounding_boxes,
-            },
-        }
-    except Exception as e:
-        import traceback
-
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-if __name__ == "__main__":
-    import uvicorn
-
-    uvicorn.run(app, host="0.0.0.0", port=8000)
