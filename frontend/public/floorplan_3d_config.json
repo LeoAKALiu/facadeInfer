@@ -1,0 +1,9 @@
+{
+  "wallHeight": 2.8,
+  "floorHeight": 3.0,
+  "structuralElements": {
+    "columns": [],
+    "beams": [],
+    "shearWalls": []
+  }
+}

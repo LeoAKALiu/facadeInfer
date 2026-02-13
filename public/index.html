@@ -374,6 +374,8 @@
             mainImage.style.display = 'block';
             mainImage.style.transition = 'opacity 240ms ease';
             mainImage.style.opacity = '0';
+            // Must be set before `src` so it applies to this request.
+            mainImage.referrerPolicy = 'no-referrer';
             mainImage.src = src;
             mainImage.style.objectFit = objectFit;
             // allow layout to apply opacity=0 before fading in
@@ -478,8 +480,9 @@
             await sleep(420);
 
             // Commit ortho into mainImage and remove overlay.
-            mainImage.src = overlay.src;
+            // Must be set before `src` so it applies to this request.
             mainImage.referrerPolicy = 'no-referrer';
+            mainImage.src = overlay.src;
             mainImage.style.opacity = '1';
             overlay.remove();
             await waitForImageLoad(mainImage, 15000);

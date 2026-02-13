@@ -23,8 +23,12 @@ backend/uploads/
 backend/static/*.dxf
 backend/static/processed_*
 
+# Frontend
+frontend/node_modules/
+
 # From remote
 *.dxf
 *.json
 !RiskReport.json
 !public/demo_data/*.json
+!frontend/**/*.json

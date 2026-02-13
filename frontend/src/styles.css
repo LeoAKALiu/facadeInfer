@@ -1,0 +1,992 @@
+:root {
+  --terminal-height: 210px;
+}
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg: #0a0a0b;
+  --panel: #141416;
+  --panel-2: #1b1b1e;
+  --muted: #9aa0a6;
+  --text: #f7f7f8;
+  --border: rgba(255, 255, 255, 0.12);
+  --accent: #3b82f6;
+  --good: #10b981;
+  --warn: #fbbf24;
+  --bad: #ef4444;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+  background: var(--bg);
+  color: var(--text);
+}
+
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+
+.topbar {
+  height: 56px;
+  padding: 0 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--border);
+  background: rgba(10, 10, 11, 0.85);
+  backdrop-filter: blur(10px);
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+}
+
+.badge {
+  font-size: 12px;
+  padding: 2px 8px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.btn {
+  height: 34px;
+  padding: 0 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.btn:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.btnPrimary {
+  background: var(--accent);
+  border-color: rgba(59, 130, 246, 0.35);
+}
+
+.btnPrimary:hover {
+  background: rgba(59, 130, 246, 0.9);
+}
+
+.layout {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 280px 1fr 340px;
+  min-height: 0;
+}
+
+.layout.hasTerminal {
+  position: relative;
+  padding-bottom: var(--terminal-height);
+}
+
+.sidebar,
+.right {
+  border-right: 1px solid var(--border);
+  background: rgba(10, 10, 11, 0.65);
+}
+
+.right {
+  border-right: none;
+  border-left: 1px solid var(--border);
+}
+
+.sidebar {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  position: relative;
+}
+
+.step {
+  border: 1px solid transparent;
+  background: transparent;
+  text-align: left;
+  color: inherit;
+  padding: 12px 12px;
+  border-radius: 10px;
+  cursor: pointer;
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.step:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.stepActive {
+  border-color: var(--border);
+  background: var(--panel);
+}
+
+.stepCompleted {
+  border-color: rgba(16, 185, 129, 0.35);
+  background: rgba(16, 185, 129, 0.12);
+}
+
+.stepIndicator {
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  border: 2px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.06);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 900;
+  color: rgba(255, 255, 255, 0.7);
+  flex: 0 0 auto;
+  margin-top: 2px;
+  z-index: 2;
+}
+
+.stepActive .stepIndicator {
+  background: rgba(59, 130, 246, 1);
+  border-color: rgba(59, 130, 246, 1);
+  color: white;
+  box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.18);
+}
+
+.stepCompleted .stepIndicator {
+  background: rgba(16, 185, 129, 1);
+  border-color: rgba(16, 185, 129, 1);
+  color: white;
+  box-shadow: 0 0 0 4px rgba(16, 185, 129, 0.16);
+}
+
+.stepContent {
+  flex: 1;
+}
+
+.stepTitle {
+  font-weight: 800;
+  font-size: 13px;
+}
+
+.stepDesc {
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.stepConnector {
+  position: absolute;
+  width: 2px;
+  background: rgba(255, 255, 255, 0.16);
+  border-radius: 2px;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.stepConnector.active {
+  background: rgba(16, 185, 129, 0.35);
+}
+
+.stepDot {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  border-radius: 999px;
+  background: rgba(16, 185, 129, 1);
+  box-shadow: 0 0 18px rgba(16, 185, 129, 0.85), 0 0 4px rgba(16, 185, 129, 1);
+  pointer-events: none;
+  z-index: 3;
+  transition: transform 650ms cubic-bezier(0.2, 0.8, 0.2, 1), opacity 220ms ease;
+}
+
+.viewport {
+  min-width: 0;
+  min-height: 0;
+  position: relative;
+  background: #000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.viewportInner {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  grid-template-rows: auto 1fr;
+}
+
+.viewportHeader {
+  height: 42px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 14px;
+  border-bottom: 1px solid var(--border);
+  background: rgba(20, 20, 22, 0.9);
+}
+
+.viewportHeaderTitle {
+  font-weight: 800;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.78);
+}
+
+.viewportBody {
+  position: relative;
+  overflow: hidden;
+  background: #101012;
+}
+
+/* Standby empty-state */
+.standbyGrid {
+  position: absolute;
+  inset: 0;
+  background: #1a1a1a;
+  background-image: linear-gradient(rgba(255, 255, 255, 0.06) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.06) 1px, transparent 1px);
+  background-size: 44px 44px;
+}
+
+.standbyGrid::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at 30% 30%, rgba(34, 211, 238, 0.08), transparent 55%),
+    radial-gradient(circle at 70% 65%, rgba(16, 185, 129, 0.06), transparent 60%);
+  pointer-events: none;
+}
+
+.standbyCenter {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: 10px;
+}
+
+.standbyLine {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-weight: 800;
+  font-size: 13px;
+  letter-spacing: 0.18em;
+  color: rgba(255, 255, 255, 0.86);
+}
+
+.standbySub {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.45);
+}
+
+@keyframes blink {
+  0%,
+  49% {
+    opacity: 1;
+  }
+  50%,
+  100% {
+    opacity: 0;
+  }
+}
+
+.blinkCursor {
+  display: inline-block;
+  margin-left: 6px;
+  animation: blink 0.9s steps(2, jump-none) infinite;
+  color: rgba(34, 211, 238, 0.95);
+}
+
+/* Cyberpunk scanner */
+@keyframes scannerSweep {
+  0% {
+    transform: translateY(0);
+    opacity: 0.2;
+  }
+  10% {
+    opacity: 1;
+  }
+  90% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(100%);
+    opacity: 0.2;
+  }
+}
+
+.scannerLine {
+  top: 0;
+  animation: scannerSweep 3s linear infinite;
+}
+
+.viewportImg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.viewportImgBase {
+  z-index: 1;
+  transition: opacity 180ms ease;
+}
+
+.viewportImgOverlay {
+  z-index: 2;
+  transition: opacity 380ms ease, transform 380ms ease;
+  transform-origin: 0 0;
+}
+
+.viewportIframe {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: #101012;
+}
+
+.viewportLoading {
+  position: absolute;
+  left: 12px;
+  top: 12px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(0, 0, 0, 0.55);
+  color: rgba(255, 255, 255, 0.82);
+  font-size: 12px;
+  font-weight: 700;
+  backdrop-filter: blur(10px);
+  z-index: 10;
+}
+
+.viewportEmpty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(255, 255, 255, 0.65);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.viewportOverlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 5;
+  width: 100%;
+  height: 100%;
+}
+
+.viewArrow {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 20;
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(0, 0, 0, 0.45);
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 30px;
+  font-weight: 900;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  user-select: none;
+  backdrop-filter: blur(10px);
+}
+
+.viewArrow:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.viewArrowLeft {
+  left: 12px;
+}
+
+.viewArrowRight {
+  right: 12px;
+}
+
+.viewTag {
+  position: absolute;
+  left: 12px;
+  bottom: 12px;
+  z-index: 20;
+  padding: 8px 10px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(0, 0, 0, 0.55);
+  color: rgba(255, 255, 255, 0.82);
+  font-size: 12px;
+  font-weight: 800;
+  backdrop-filter: blur(10px);
+}
+
+.multiViewGrid {
+  position: absolute;
+  inset: 0;
+  padding: 10px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-rows: 1fr;
+  gap: 10px;
+}
+
+.multiViewCell {
+  position: relative;
+  overflow: hidden;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  background: rgba(0, 0, 0, 0.22);
+}
+
+.multiViewCell.active {
+  border-color: rgba(34, 211, 238, 0.35);
+  box-shadow: 0 0 0 1px rgba(34, 211, 238, 0.12) inset, 0 0 28px rgba(34, 211, 238, 0.08);
+}
+
+.multiViewImg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.multiViewOverlay {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  pointer-events: none;
+  transition: opacity 260ms ease;
+}
+
+.multiViewTag {
+  position: absolute;
+  left: 10px;
+  top: 10px;
+  z-index: 12;
+  padding: 6px 8px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(0, 0, 0, 0.55);
+  color: rgba(255, 255, 255, 0.82);
+  font-size: 11px;
+  font-weight: 800;
+  backdrop-filter: blur(10px);
+}
+
+.multiViewHint {
+  position: absolute;
+  inset: 0;
+  z-index: 11;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(255, 255, 255, 0.75);
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  text-shadow: 0 0 18px rgba(34, 211, 238, 0.12);
+}
+
+.floorplanStage {
+  position: absolute;
+  inset: 0;
+  background: #111;
+  overflow: hidden;
+}
+
+.floorplanToolbar {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(10px);
+  color: rgba(255, 255, 255, 0.82);
+  user-select: none;
+}
+
+.floorplanTabs {
+  display: flex;
+  gap: 4px;
+}
+
+.fpTab {
+  padding: 6px 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.8);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.fpTab:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.fpTab.active {
+  background: rgba(34, 197, 94, 0.35);
+  border-color: rgba(34, 197, 94, 0.5);
+  color: #fff;
+}
+
+.floorplanToolbarTitle {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-weight: 800;
+  font-size: 11px;
+  letter-spacing: 0.3px;
+}
+
+.floorplanToolbarBtns {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.fpBtn {
+  height: 28px;
+  min-width: 42px;
+  padding: 0 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.9);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.fpBtn:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.fpZoom {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: 12px;
+  font-weight: 800;
+  color: rgba(34, 197, 94, 0.85);
+  padding-left: 2px;
+}
+
+.floorplanViewport {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  touch-action: none;
+  cursor: grab;
+}
+
+.floorplan3DView {
+  flex: 1;
+  min-height: 0;
+  cursor: grab;
+}
+
+.floorplanViewport:active {
+  cursor: grabbing;
+}
+
+.floorplanCanvas {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform-origin: 0 0;
+  background: #fafafa;
+  border: 2px solid rgba(255, 255, 255, 0.10);
+  box-shadow: 0 6px 30px rgba(0, 0, 0, 0.35);
+  overflow: hidden;
+}
+
+.floorplanCanvas .room-svg {
+  position: absolute;
+  display: block;
+  --room-fill: transparent;
+  --room-label: rgba(15, 23, 42, 0.78);
+}
+
+.floorplanCanvas .roomSvgInner {
+  position: absolute;
+  inset: 0;
+}
+
+.floorplanCanvas .room-svg svg {
+  width: 100% !important;
+  height: 100% !important;
+}
+
+.floorplanCanvas .room-svg path,
+.floorplanCanvas .room-svg rect,
+.floorplanCanvas .room-svg line,
+.floorplanCanvas .room-svg polyline,
+.floorplanCanvas .room-svg polygon,
+.floorplanCanvas .room-svg circle,
+.floorplanCanvas .room-svg ellipse {
+  vector-effect: non-scaling-stroke;
+  stroke-width: 1.2;
+  stroke-dasharray: 3 2;
+  stroke-linecap: butt;
+  stroke-linejoin: miter;
+  fill: var(--room-fill);
+  stroke: rgba(15, 23, 42, 0.92);
+}
+
+.floorplanCanvas .roomLabel {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  gap: 4px;
+  letter-spacing: 0.2px;
+  color: var(--room-label);
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.6), 0 0 16px rgba(255, 255, 255, 0.25);
+  pointer-events: none;
+}
+
+.floorplanCanvas .roomName {
+  font-size: 24px;
+  font-weight: 900;
+}
+
+.floorplanCanvas .roomConf {
+  font-size: 12px;
+  font-weight: 800;
+  opacity: 0.85;
+}
+
+/* Positions copied from `public/floor_plan.html` (Figma-derived coordinates). */
+/* Room layout – edges snapped so adjacent rooms share exact boundaries,
+   plus ~0.2 % inflation on width/height to mask sub-pixel rendering gaps. */
+.floorplanCanvas .livingroom {
+  left: 0%;
+  top: 14.8%;
+  width: 67.5%;
+  height: 72.5%;
+  --room-fill: rgba(250, 204, 21, 0.10);
+  --room-label: rgba(146, 64, 14, 0.85);
+}
+.floorplanCanvas .balcony {
+  left: 4.5%;
+  top: 87.1%;
+  width: 28.0%;
+  height: 11.9%;
+  --room-fill: rgba(148, 163, 184, 0.10);
+  --room-label: rgba(30, 41, 59, 0.85);
+}
+.floorplanCanvas .kitchen {
+  left: 15.4%;
+  top: 0%;
+  width: 22.3%;
+  height: 25.3%;
+  --room-fill: rgba(34, 197, 94, 0.10);
+  --room-label: rgba(20, 83, 45, 0.88);
+}
+.floorplanCanvas .bathroom {
+  left: 37.5%;
+  top: 21.5%;
+  width: 17.8%;
+  height: 28.8%;
+  --room-fill: rgba(56, 189, 248, 0.10);
+  --room-label: rgba(12, 74, 110, 0.88);
+}
+.floorplanCanvas .bedroom1 {
+  left: 67.3%;
+  top: 50.1%;
+  width: 32.7%;
+  height: 37.2%;
+  --room-fill: rgba(168, 85, 247, 0.11);
+  --room-label: rgba(88, 28, 135, 0.90);
+}
+.floorplanCanvas .bedroom2 {
+  left: 55.1%;
+  top: 21.5%;
+  width: 31.9%;
+  height: 28.0%;
+  --room-fill: rgba(168, 85, 247, 0.11);
+  --room-label: rgba(88, 28, 135, 0.90);
+}
+.floorplanCanvas .bedroom3 {
+  left: 37.5%;
+  top: 60.3%;
+  width: 30.0%;
+  height: 27.0%;
+  --room-fill: rgba(168, 85, 247, 0.11);
+  --room-label: rgba(88, 28, 135, 0.90);
+}
+
+.right {
+  padding: 16px;
+  overflow: auto;
+}
+
+.card {
+  border: 1px solid var(--border);
+  background: var(--panel);
+  border-radius: 12px;
+  padding: 14px;
+  margin-bottom: 12px;
+}
+
+.cardTitle {
+  font-weight: 800;
+  font-size: 13px;
+  margin-bottom: 10px;
+}
+
+.row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 0;
+  border-bottom: 1px dashed rgba(255, 255, 255, 0.08);
+}
+
+.row:last-child {
+  border-bottom: none;
+}
+
+.label {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.val {
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.log {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: 12px;
+  line-height: 1.45;
+  color: rgba(34, 197, 94, 0.9);
+  white-space: pre-wrap;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  padding: 10px;
+  min-height: 120px;
+}
+
+.terminalPanel {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: var(--terminal-height);
+  background: rgba(0, 0, 0, 0.72);
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+  backdrop-filter: blur(10px);
+  display: flex;
+  flex-direction: column;
+  z-index: 50;
+}
+
+.terminalHeader {
+  height: 34px;
+  padding: 0 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.75);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  user-select: none;
+}
+
+.terminalTitle {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+}
+
+.terminalDim {
+  color: rgba(34, 197, 94, 0.65);
+  font-weight: 600;
+}
+
+.terminalOutput {
+  flex: 1;
+  overflow-y: auto;
+  padding: 10px 12px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: 12px;
+  line-height: 1.4;
+  color: rgba(34, 197, 94, 0.95);
+  white-space: pre-wrap;
+}
+
+.modalBackdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.72);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  z-index: 2000;
+}
+
+.modal {
+  width: min(1100px, 100%);
+  border-radius: 14px;
+  background: rgba(20, 20, 22, 0.95);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  padding: 18px;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+}
+
+.thumbGroupButton {
+  position: absolute;
+  inset: 0;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  border-radius: 12px;
+}
+
+.thumbGroupButton:focus-visible {
+  outline: 2px solid rgba(34, 211, 238, 0.75);
+  outline-offset: 4px;
+}
+
+.thumb {
+  width: 100%;
+  aspect-ratio: 10 / 7;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  cursor: pointer;
+  background: rgba(0, 0, 0, 0.25);
+  display: grid;
+  grid-template-rows: 1fr auto;
+}
+
+.thumbImg {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  background: rgba(0, 0, 0, 0.35);
+}
+
+.thumbLabel {
+  padding: 8px 0;
+  font-size: 12px;
+  text-align: center;
+  color: rgba(255, 255, 255, 0.8);
+  font-weight: 700;
+}
+
+@keyframes guidePulseRing {
+  0% {
+    box-shadow: 0 0 0 0 rgba(34, 211, 238, 0.55), 0 0 18px rgba(34, 211, 238, 0.12);
+  }
+  70% {
+    box-shadow: 0 0 0 12px rgba(34, 211, 238, 0), 0 0 22px rgba(34, 211, 238, 0.10);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(34, 211, 238, 0), 0 0 18px rgba(34, 211, 238, 0.12);
+  }
+}
+
+.guidePulse {
+  animation: guidePulseRing 1.25s ease-out infinite;
+}
+
+@keyframes cardJumpIn {
+  0% {
+    transform: translateY(10px) scale(0.985);
+    opacity: 0;
+  }
+  55% {
+    transform: translateY(-6px) scale(1.012);
+    opacity: 1;
+  }
+  78% {
+    transform: translateY(3px) scale(0.998);
+  }
+  100% {
+    transform: translateY(0) scale(1);
+    opacity: 1;
+  }
+}
+
+.cardJumpIn {
+  animation: cardJumpIn 520ms cubic-bezier(0.2, 0.9, 0.2, 1) both;
+}
+
+@media (max-width: 1200px) {
+  .layout {
+    grid-template-columns: 260px 1fr 320px;
+  }
+}
+
+@media (max-width: 980px) {
+  .layout {
+    grid-template-columns: 1fr;
+  }
+  .sidebar,
+  .right {
+    display: none;
+  }
+}
+

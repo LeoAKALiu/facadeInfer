@@ -1,0 +1,26 @@
+[Unit]
+Description=NewDemoFacade (FastAPI + frontend) on :8000
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/root/NewDemoFacade
+
+# Runtime env (override with an /etc/default file if needed)
+Environment=HOST=0.0.0.0
+Environment=PORT=8000
+Environment=RELOAD=0
+Environment=LOG_LEVEL=info
+Environment=PYTHONUNBUFFERED=1
+
+# Start command
+ExecStart=/usr/bin/python3 /root/NewDemoFacade/run_server.py
+
+# Keep it alive
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target
+

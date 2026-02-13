@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import json
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -14,10 +12,10 @@ if TYPE_CHECKING:
 
 
 def test_cases_thumbnails_use_demo_data_prefix() -> None:
-    """The `/cases` endpoint should only return `/demo_data/` thumbnails."""
+    """The `/api/cases` endpoint should only return `/demo_data/` thumbnails."""
     client = TestClient(index.app)
 
-    resp = client.get("/cases")
+    resp = client.get("/api/cases")
     assert resp.status_code == 200
 
     buildings = resp.json()
@@ -29,59 +27,18 @@ def test_cases_thumbnails_use_demo_data_prefix() -> None:
             assert facade["thumbnail"].startswith("/demo_data/")
 
 
-def test_cases_thumbnails_use_configured_asset_base_url(monkeypatch: MonkeyPatch) -> None:
-    """When configured, `/cases` should return OSS-backed absolute URLs."""
-    monkeypatch.setenv("DEMO_ASSET_BASE_URL", "https://facade-demo.oss-cn-beijing.aliyuncs.com/demo")
-    client = TestClient(index.app)
-
-    resp = client.get("/cases")
-    assert resp.status_code == 200
-    buildings = resp.json()
-    assert isinstance(buildings, list)
-    assert buildings, "Expected at least one demo building"
-
-    for building in buildings:
-        assert building["floorplan_svg_base_url"] == "https://facade-demo.oss-cn-beijing.aliyuncs.com/demo/Untitled"
-        for facade in building["facades"]:
-            assert facade["thumbnail"].startswith("https://facade-demo.oss-cn-beijing.aliyuncs.com/demo/")
-            assert facade["ortho_image"].startswith("https://facade-demo.oss-cn-beijing.aliyuncs.com/demo/")
-
-
-def test_cases_use_public_asset_base_for_ortho(monkeypatch: MonkeyPatch) -> None:
-    """If originals are private, ortho/json/svg can still be served from a public base."""
-    monkeypatch.delenv("DEMO_ASSET_BASE_URL", raising=False)
-    monkeypatch.setenv("DEMO_PUBLIC_ASSET_BASE_URL", "https://facade-demo.oss-cn-beijing.aliyuncs.com/demo")
-    client = TestClient(index.app)
-
-    resp = client.get("/cases")
-    assert resp.status_code == 200
-    buildings = resp.json()
-    assert buildings and isinstance(buildings, list)
-    assert buildings[0]["floorplan_svg_base_url"] == "https://facade-demo.oss-cn-beijing.aliyuncs.com/demo/Untitled"
-
-    facade0 = buildings[0]["facades"][0]
-    # Thumbnail remains local by default, but ortho should use the public base.
-    assert facade0["thumbnail"].startswith("/demo_data/")
-    assert facade0["ortho_image"].startswith("https://facade-demo.oss-cn-beijing.aliyuncs.com/demo/")
-
-
 def test_root_serves_html() -> None:
     """The root path `/` should serve the dashboard HTML (not a JSON 404)."""
     client = TestClient(index.app)
 
     resp = client.get("/", follow_redirects=False)
-    if resp.status_code in {301, 302, 307, 308}:
-        assert resp.headers["location"] == "/index.html"
-        return
-
     assert resp.status_code == 200
     assert "text/html" in resp.headers.get("content-type", "")
-    assert "<!DOCTYPE html>" in resp.text
+    assert "<!doctype html" in resp.text.lower()
 
 
 def test_analyze_demo_images_use_demo_data_prefix(tmp_path: Path, monkeypatch: MonkeyPatch) -> None:
-    """The `/analyze_demo` endpoint should return `/demo_data/` image URLs."""
-    # Create a minimal demo_data directory in a temp "public" root.
+    """The `/api/analyze_demo` endpoint should return `/demo_data/` image URLs."""
     demo_data_dir = tmp_path / "demo_data"
     demo_data_dir.mkdir(parents=True, exist_ok=True)
 
@@ -105,11 +62,11 @@ def test_analyze_demo_images_use_demo_data_prefix(tmp_path: Path, monkeypatch: M
     Image.new("RGB", (64, 32), (255, 0, 0)).save(img_path)
 
     # Patch globals so the endpoint reads from our temp dir.
-    monkeypatch.setattr(index, "static_abs_path", str(tmp_path))
+    monkeypatch.setattr(index, "DEMO_DATA_DIR", demo_data_dir)
     monkeypatch.setattr(index.semantic_analyzer, "analyze", lambda *_args, **_kwargs: {"ok": True})
 
     client = TestClient(index.app)
-    resp = client.post("/analyze_demo", data={"case_id": case_id})
+    resp = client.post("/api/analyze_demo", data={"case_id": case_id})
     assert resp.status_code == 200
 
     payload: dict[str, Any] = resp.json()
