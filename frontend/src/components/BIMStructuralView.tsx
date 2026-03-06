@@ -40,8 +40,9 @@ type BeamElement = {
 
 type ShearWallElement = {
   id: string;
-  points: number[][];
-  thickness: number;
+  points: number[][];  // polyline center-line vertices
+  thickness: number;    // mm
+  height: number;       // metres
   label: string;
 };
 
@@ -195,28 +196,44 @@ export function BIMStructuralView({ className = "", reloadKey = 0 }: BIMStructur
         (sceneModel as any).createEntity({ id: `beam_${beam.id}`, meshIds: [`beam_mesh_${beam.id}`], isObject: true });
       }
 
-      // ---- Shear walls ----
+      // ---- Shear walls (per-segment extrusion along polyline center-line) ----
       for (const wall of se?.shearWalls ?? []) {
-        if (!wall.points || wall.points.length < 3) continue;
-        const gid = `shearWall_geom_${geomIdx++}`;
-        let minX = Infinity, minZ = Infinity, maxX = -Infinity, maxZ = -Infinity;
-        for (const [px, py] of wall.points) {
-          const sx = px * PX_TO_M;
-          const sz = py * PX_TO_M;
-          if (sx < minX) minX = sx;
-          if (sz < minZ) minZ = sz;
-          if (sx > maxX) maxX = sx;
-          if (sz > maxZ) maxZ = sz;
+        if (!wall.points || wall.points.length < 2) continue;
+        const wThick = (wall.thickness ?? 200) / 1000; // mm → m
+        const wHeight = wall.height ?? wallH;           // metres (fallback to config wallHeight)
+        const meshIds: string[] = [];
+        for (let si = 0; si < wall.points.length - 1; si++) {
+          const [ax, ay] = wall.points[si];
+          const [bx, by] = wall.points[si + 1];
+          const sx1 = ax * PX_TO_M;
+          const sz1 = ay * PX_TO_M;
+          const sx2 = bx * PX_TO_M;
+          const sz2 = by * PX_TO_M;
+          const segDx = sx2 - sx1;
+          const segDz = sz2 - sz1;
+          const segLen = Math.sqrt(segDx * segDx + segDz * segDz);
+          if (segLen < 0.001) continue;
+          const segAngle = Math.atan2(segDz, segDx);
+
+          const gid = `shearWall_geom_${geomIdx++}`;
+          const segBox: any = buildBoxGeometry({ xSize: segLen / 2, ySize: wHeight / 2, zSize: wThick / 2 });
+          const segGeom = safeBoxGeometry(segBox);
+          if (!segGeom) continue;
+          (sceneModel as any).createGeometry({ id: gid, primitive: "triangles", positions: segGeom.positions, normals: segGeom.normals, indices: segGeom.indices });
+          const meshId = `shearWall_mesh_${wall.id}_${si}`;
+          (sceneModel as any).createMesh({
+            id: meshId,
+            geometryId: gid,
+            position: [(sx1 + sx2) / 2, wHeight / 2, (sz1 + sz2) / 2],
+            rotation: [0, -(segAngle * 180) / Math.PI, 0],
+            color: [0.55, 0.45, 0.35],
+            opacity: 0.9,
+          });
+          meshIds.push(meshId);
         }
-        const sw = maxX - minX;
-        const sd = maxZ - minZ;
-        const sh = (wall.thickness ?? 200) / 1000;
-        const wallBox: any = buildBoxGeometry({ xSize: sw / 2, ySize: sh / 2, zSize: sd / 2 });
-        const wallGeom = safeBoxGeometry(wallBox);
-        if (!wallGeom) continue;
-        (sceneModel as any).createGeometry({ id: gid, primitive: "triangles", positions: wallGeom.positions, normals: wallGeom.normals, indices: wallGeom.indices });
-        (sceneModel as any).createMesh({ id: `shearWall_mesh_${wall.id}`, geometryId: gid, position: [(minX + maxX) / 2, wallH / 2, (minZ + maxZ) / 2], color: [0.55, 0.45, 0.35], opacity: 0.9 });
-        (sceneModel as any).createEntity({ id: `shearWall_${wall.id}`, meshIds: [`shearWall_mesh_${wall.id}`], isObject: true });
+        if (meshIds.length > 0) {
+          (sceneModel as any).createEntity({ id: `shearWall_${wall.id}`, meshIds, isObject: true });
+        }
       }
 
       // ---- Floor slab (ground) ----

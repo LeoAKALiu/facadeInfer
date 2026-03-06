@@ -148,16 +148,20 @@ function EditShearWallModal({
   onClose: () => void;
 }): JSX.Element {
   const [thickness, setThickness] = useState(String(wall.thickness));
+  const [height, setHeight] = useState(String(wall.height ?? 2.8));
   const [label, setLabel] = useState(wall.label);
-  const [pointsText, setPointsText] = useState(wall.points.map((p) => `${p[0]},${p[1]}`).join("\n"));
+  const [pointsText, setPointsText] = useState(
+    (Array.isArray(wall.points) ? wall.points : []).map((p) => `${p[0]},${p[1]}`).join("\n")
+  );
   return (
     <div style={styleOverlay} onClick={onClose}>
       <div style={styleBox} onClick={(e) => e.stopPropagation()}>
         <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 16, color: "#1e293b" }}>修改剪力墙</div>
         <div style={styleRow}><span style={styleLabel}>厚度(mm)</span><input style={styleInput} value={thickness} onChange={(e) => setThickness(e.target.value)} type="number" /></div>
+        <div style={styleRow}><span style={styleLabel}>高度(m)</span><input style={styleInput} value={height} onChange={(e) => setHeight(e.target.value)} type="number" step="0.1" /></div>
         <div style={styleRow}><span style={styleLabel}>标签</span><input style={styleInput} value={label} onChange={(e) => setLabel(e.target.value)} /></div>
         <div style={{ marginBottom: 10 }}>
-          <div style={styleLabel}>顶点 (每行 x,y)</div>
+          <div style={styleLabel}>中线顶点 (每行 x,y)</div>
           <textarea
             value={pointsText}
             onChange={(e) => setPointsText(e.target.value)}
@@ -174,10 +178,10 @@ function EditShearWallModal({
                 const part = line.trim().split(/[,，\s]+/);
                 if (part.length >= 2) points.push([Number(part[0]), Number(part[1])]);
               });
-                if (points.length >= 3) {
+                if (points.length >= 2) {
                   const walls = elements?.shearWalls ?? [];
                   const next = walls.map((s) =>
-                    s.id === wall.id ? { ...s, points, thickness: Number(thickness), label } : s
+                    s.id === wall.id ? { ...s, points, thickness: Number(thickness), height: Number(height), label } : s
                   );
                   onSave({ columns: elements?.columns ?? [], beams: elements?.beams ?? [], shearWalls: next });
                 }
@@ -343,8 +347,9 @@ export function StructuralEditor(): JSX.Element {
       const walls = elements?.shearWalls ?? [];
       const w: ShearWallElement = {
         id: uid("qw"),
-        points: [[cx - 100, cy - 80], [cx + 100, cy - 80], [cx + 100, cy + 80], [cx - 100, cy + 80]],
+        points: [[cx - 100, cy], [cx + 100, cy]],
         thickness: 200,
+        height: 2.8,
         label: `QW-${walls.length + 1}`,
       };
       setElements({ ...elements, columns: elements?.columns ?? [], beams: elements?.beams ?? [], shearWalls: [...walls, w] });
@@ -399,7 +404,7 @@ export function StructuralEditor(): JSX.Element {
       <div style={{ padding: "6px 16px", background: "#fffbeb", borderBottom: "1px solid #fde68a", fontSize: 12, color: "#92400e" }}>
         {tool === "column" && "点击画布放置柱（40×40 默认尺寸）"}
         {tool === "beam" && "点击两次画布确定梁的两个端点"}
-        {tool === "shearWall" && "依次点击画布添加剪力墙的顶点，双击闭合多边形"}
+        {tool === "shearWall" && "依次点击画布绘制剪力墙中线，右键结束绘制（至少2个点）"}
         {tool === "select" && "点击选中构件 → 拖拽移动 | 双击标签编辑 | 右键删除 | Delete 键删除选中"}
       </div>
 

@@ -28,8 +28,9 @@ export type BeamElement = {
 
 export type ShearWallElement = {
   id: string;
-  points: number[][];
-  thickness: number;
+  points: number[][];  // polyline vertices (center line), minimum 2
+  thickness: number;    // mm, default 200
+  height: number;       // metres, default = wallHeight from config
   label: string;
 };
 
@@ -108,13 +109,16 @@ export function EditorCanvas({ activeTool, elements, onChange, selectedId: selec
   const shearWalls = elements?.shearWalls ?? [];
   const safeElements: StructuralElements = { columns, beams, shearWalls };
 
-  // Convert mouse event to SVG coordinates
+  // Convert mouse event to SVG coordinates using the SVG's own CTM
+  // (handles viewBox aspect-ratio / padding correctly — no manual math needed)
   const toSvg = useCallback((e: React.MouseEvent): { x: number; y: number } => {
     const svg = svgRef.current;
     if (!svg) return { x: 0, y: 0 };
-    const rect = svg.getBoundingClientRect();
-    const x = ((e.clientX - rect.left) / rect.width) * FLOORPLAN_BASE.w;
-    const y = ((e.clientY - rect.top) / rect.height) * FLOORPLAN_BASE.h;
+    const ctm = svg.getScreenCTM();
+    if (!ctm) return { x: 0, y: 0 };
+    const inv = ctm.inverse();
+    const x = inv.a * e.clientX + inv.c * e.clientY + inv.e;
+    const y = inv.b * e.clientX + inv.d * e.clientY + inv.f;
     return { x: clamp(x, 0, FLOORPLAN_BASE.w), y: clamp(y, 0, FLOORPLAN_BASE.h) };
   }, []);
 
@@ -164,23 +168,39 @@ export function EditorCanvas({ activeTool, elements, onChange, selectedId: selec
     [activeTool, beamStart, columns, beams, shearWalls, safeElements, onChange, snap, toSvg, shearWallPoints]
   );
 
-  // ----- Double-click to close shear wall polygon -----
-  const handleDoubleClick = useCallback(
+  // ----- Finish shear wall polyline (called on right-click or double-click) -----
+  const finishShearWall = useCallback((): boolean => {
+    if (shearWallPoints.length >= 2) {
+      const wall: ShearWallElement = {
+        id: uid("qw"),
+        points: [...shearWallPoints],
+        thickness: 200,
+        height: 2.8,
+        label: `QW-${shearWalls.length + 1}`,
+      };
+      onChange({ ...safeElements, shearWalls: [...shearWalls, wall] });
+      setShearWallPoints([]);
+      return true;
+    }
+    return false;
+  }, [shearWallPoints, safeElements, shearWalls, onChange]);
+
+  // ----- SVG-level right-click: finish drawing or delete element -----
+  const handleSvgContextMenu = useCallback(
     (e: React.MouseEvent) => {
-      if (activeTool === "shearWall" && shearWallPoints.length >= 3) {
-        e.preventDefault();
+      e.preventDefault();
+      // If currently drawing a shear wall, finish it
+      if (activeTool === "shearWall" && shearWallPoints.length >= 2) {
         e.stopPropagation();
-        const wall: ShearWallElement = {
-          id: uid("qw"),
-          points: [...shearWallPoints],
-          thickness: 200,
-          label: `QW-${shearWalls.length + 1}`,
-        };
-        onChange({ ...safeElements, shearWalls: [...shearWalls, wall] });
+        finishShearWall();
+        return;
+      }
+      // If drawing but < 2 points, just cancel
+      if (activeTool === "shearWall" && shearWallPoints.length > 0) {
         setShearWallPoints([]);
       }
     },
-    [activeTool, safeElements, shearWalls, onChange, shearWallPoints]
+    [activeTool, shearWallPoints, finishShearWall]
   );
 
   // ----- Drag (select tool) -----
@@ -328,7 +348,7 @@ export function EditorCanvas({ activeTool, elements, onChange, selectedId: selec
         viewBox={`0 0 ${FLOORPLAN_BASE.w} ${FLOORPLAN_BASE.h}`}
         style={{ width: "100%", maxWidth: 800, height: "auto", background: "#fff", borderRadius: 8, boxShadow: "0 2px 12px rgba(0,0,0,0.08)" }}
         onClick={handleClick}
-        onDoubleClick={handleDoubleClick}
+        onContextMenu={handleSvgContextMenu}
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
       >
@@ -357,19 +377,29 @@ export function EditorCanvas({ activeTool, elements, onChange, selectedId: selec
           <line key={`gh${i}`} x1={0} y1={(i + 1) * 100} x2={FLOORPLAN_BASE.w} y2={(i + 1) * 100} stroke="#e2e8f0" strokeWidth={0.5} />
         ))}
 
-        {/* Shear walls */}
+        {/* Shear walls (polyline center-line style with thickness as stroke width) */}
         {shearWalls.map((s) => {
           const pts = Array.isArray(s?.points) ? s.points : [];
           if (pts.length < 2) return null;
-          const d = pts.map((p, i) => `${i === 0 ? "M" : "L"} ${p[0]} ${p[1]}`).join(" ") + " Z";
+          const polyStr = pts.map((p) => `${p[0]},${p[1]}`).join(" ");
           const cx = pts.reduce((a, p) => a + p[0], 0) / pts.length;
           const cy = pts.reduce((a, p) => a + p[1], 0) / pts.length;
+          // thickness: mm → SVG px (1 SVG px ≈ 10mm)
+          const strokeW = Math.max((s.thickness ?? 200) / 10, 4);
           return (
             <g key={s.id} onPointerDown={(e) => handlePointerDown(s.id, e)} onContextMenu={(e) => handleContextMenu(s.id, e)}>
-              <path d={d} fill="rgba(180,140,80,0.25)" stroke="#94a3b8" strokeWidth={2} />
-              <path d={d} fill="none" stroke={selStroke(s.id)} strokeWidth={3} />
+              {/* Wall body (thick stroke) */}
+              <polyline points={polyStr} fill="none" stroke="rgba(180,140,80,0.55)" strokeWidth={strokeW} strokeLinecap="butt" strokeLinejoin="miter" />
+              {/* Center line */}
+              <polyline points={polyStr} fill="none" stroke="#94a3b8" strokeWidth={1.5} strokeDasharray="6 3" />
+              {/* Selection highlight */}
+              <polyline points={polyStr} fill="none" stroke={selStroke(s.id)} strokeWidth={strokeW + 6} strokeLinecap="butt" strokeLinejoin="miter" opacity={0.5} />
+              {/* Vertex dots */}
+              {pts.map((p, i) => (
+                <circle key={i} cx={p[0]} cy={p[1]} r={4} fill="#b8860b" stroke="#fff" strokeWidth={1} />
+              ))}
               <text
-                x={cx} y={cy} textAnchor="middle" dominantBaseline="central"
+                x={cx} y={cy - strokeW / 2 - 8} textAnchor="middle" dominantBaseline="central"
                 fontSize={14} fontWeight={700} fill="#475569" style={{ cursor: "pointer" }}
                 onDoubleClick={(e) => startEdit(s.id, s.label, e)}
               >
@@ -426,12 +456,24 @@ export function EditorCanvas({ activeTool, elements, onChange, selectedId: selec
           </circle>
         )}
 
-        {/* In-progress shear wall polygon */}
+        {/* In-progress shear wall polyline */}
         {shearWallPoints.length > 0 && (
-          <polyline
-            points={shearWallPoints.map((p) => `${p[0]},${p[1]}`).join(" ")}
-            fill="none" stroke="#94a3b8" strokeWidth={2} strokeDasharray="6 3"
-          />
+          <>
+            {/* Thickness preview (default 200mm → 20 SVG px) */}
+            <polyline
+              points={shearWallPoints.map((p) => `${p[0]},${p[1]}`).join(" ")}
+              fill="none" stroke="rgba(180,140,80,0.25)" strokeWidth={20} strokeLinecap="butt" strokeLinejoin="miter"
+            />
+            {/* Center line preview */}
+            <polyline
+              points={shearWallPoints.map((p) => `${p[0]},${p[1]}`).join(" ")}
+              fill="none" stroke="#94a3b8" strokeWidth={2} strokeDasharray="6 3"
+            />
+            {/* Vertex dots */}
+            {shearWallPoints.map((p, i) => (
+              <circle key={i} cx={p[0]} cy={p[1]} r={4} fill="#b8860b" stroke="#fff" strokeWidth={1} opacity={0.7} />
+            ))}
+          </>
         )}
       </svg>
 
